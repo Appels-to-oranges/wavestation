@@ -250,6 +250,146 @@
       options.decades.map((d) => `<option value="${d}"${d === currentDecade ? " selected" : ""}>${d}</option>`).join("");
   }
 
+  // ---------- Chart helpers ----------
+
+  const CHART_COLORS = [
+    "#1db954", "#1ed760", "#4ade80", "#22d3ee", "#818cf8",
+    "#c084fc", "#f472b6", "#fb923c", "#facc15", "#34d399",
+  ];
+
+  const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: "bottom",
+        labels: { color: "#888", boxWidth: 12, padding: 12, font: { size: 11 } },
+      },
+      tooltip: {
+        backgroundColor: "#1e1e1e",
+        titleColor: "#e4e4e4",
+        bodyColor: "#e4e4e4",
+        borderColor: "#2a2a2a",
+        borderWidth: 1,
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: "#888", font: { size: 10 }, maxTicksLimit: 12 },
+        grid: { color: "rgba(255,255,255,0.05)" },
+      },
+      y: {
+        ticks: { color: "#888", font: { size: 10 } },
+        grid: { color: "rgba(255,255,255,0.05)" },
+        beginAtZero: true,
+      },
+    },
+  };
+
+  let genreChart = null;
+  let decadeChart = null;
+  let artistChart = null;
+
+  function formatMonth(m) {
+    const [y, mo] = m.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[parseInt(mo, 10) - 1]} ${y.slice(2)}`;
+  }
+
+  async function loadTrends() {
+    const data = await api("/api/trends");
+    if (!data) return;
+
+    const labels = data.months.map(formatMonth);
+
+    // Genre trends chart
+    if (genreChart) genreChart.destroy();
+    genreChart = new Chart(document.getElementById("genre-trends-chart"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: data.genreSeries.map((s, i) => ({
+          label: s.label,
+          data: s.data,
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          pointRadius: 0,
+          pointHitRadius: 8,
+        })),
+      },
+      options: chartDefaults,
+    });
+
+    // Decade trends chart
+    if (decadeChart) decadeChart.destroy();
+    decadeChart = new Chart(document.getElementById("decade-trends-chart"), {
+      type: "line",
+      data: {
+        labels,
+        datasets: data.decadeSeries.map((s, i) => ({
+          label: s.label,
+          data: s.data,
+          borderColor: CHART_COLORS[i % CHART_COLORS.length],
+          backgroundColor: CHART_COLORS[i % CHART_COLORS.length] + "20",
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          pointRadius: 0,
+          pointHitRadius: 8,
+        })),
+      },
+      options: chartDefaults,
+    });
+
+    // Populate artist picker
+    const picker = $("#artist-picker-select");
+    picker.innerHTML = '<option value="">Select an artist…</option>' +
+      data.artistList.map((a) =>
+        `<option value="${a.id}">${a.name} (${a.trackCount} tracks)</option>`
+      ).join("");
+  }
+
+  async function loadArtistTimeline(artistId) {
+    const emptyMsg = $("#artist-timeline-empty");
+    if (!artistId) {
+      if (artistChart) { artistChart.destroy(); artistChart = null; }
+      emptyMsg.style.display = "";
+      return;
+    }
+
+    const data = await api(`/api/trends?artist=${artistId}`);
+    if (!data || !data.artistTimeline) return;
+
+    emptyMsg.style.display = "none";
+    const labels = data.months.map(formatMonth);
+
+    if (artistChart) artistChart.destroy();
+    artistChart = new Chart(document.getElementById("artist-timeline-chart"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: `${data.artistName} — tracks added`,
+          data: data.artistTimeline,
+          backgroundColor: "#1db954" + "80",
+          borderColor: "#1db954",
+          borderWidth: 1,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        ...chartDefaults,
+        plugins: {
+          ...chartDefaults.plugins,
+          legend: { display: false },
+        },
+      },
+    });
+  }
+
   // ---------- Event listeners ----------
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -270,6 +410,10 @@
     loadPlaylistAnalysis();
   });
 
+  $("#artist-picker-select").addEventListener("change", (e) => {
+    loadArtistTimeline(e.target.value);
+  });
+
   // ---------- Init ----------
 
   async function init() {
@@ -282,6 +426,7 @@
     loadProfile();
     loadListeningHistory();
     loadPlaylistAnalysis();
+    loadTrends();
   }
 
   init();

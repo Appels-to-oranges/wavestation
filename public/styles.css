@@ -452,6 +452,29 @@ body {
   flex-shrink: 0;
 }
 
+/* Chart containers */
+.trends-grid {
+  grid-template-columns: 1fr;
+}
+
+.card-wide {
+  grid-column: 1 / -1;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+}
+
+.artist-picker {
+  margin-bottom: 1rem;
+}
+
+.artist-picker .filter-select {
+  max-width: 320px;
+}
+
 /* Loading / skeleton */
 .loading-placeholder {
   display: flex;

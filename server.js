@@ -409,6 +409,126 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
   });
 });
 
+// ---------- Trends endpoint ----------
+
+app.get("/api/trends", requireAuth, (req, res) => {
+  const userId = req.session.userId;
+  if (!userId || !userDataStore.has(userId)) {
+    return res.status(400).json({ error: "No scan data." });
+  }
+
+  const store = userDataStore.get(userId);
+  const { tracks: trackMap, artists: artistMap } = store;
+  const artistFilter = req.query.artist || "";
+
+  const allTracks = Object.values(trackMap);
+
+  // Resolve genres/decade and group by month
+  const enriched = allTracks
+    .filter((t) => t.firstAdded)
+    .map((t) => {
+      const genres = new Set();
+      t.artistIds.forEach((aid) => {
+        artistMap[aid]?.genres?.forEach((g) => genres.add(g));
+      });
+      const year = parseInt(t.releaseDate?.substring(0, 4), 10) || 0;
+      const decade = year ? `${Math.floor(year / 10) * 10}s` : null;
+      const month = t.firstAdded.substring(0, 7); // "YYYY-MM"
+      return { ...t, genres: [...genres], decade, month };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  // Collect all months for consistent x-axis
+  const monthSet = new Set();
+  enriched.forEach((t) => monthSet.add(t.month));
+  const months = [...monthSet].sort();
+
+  // Genre over time: count tracks per genre per month (top 8 genres overall)
+  const genreTotals = {};
+  enriched.forEach((t) => {
+    t.genres.forEach((g) => {
+      genreTotals[g] = (genreTotals[g] || 0) + 1;
+    });
+  });
+  const topGenreNames = Object.entries(genreTotals)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([g]) => g);
+
+  const genreOverTime = {};
+  topGenreNames.forEach((g) => { genreOverTime[g] = {}; });
+  enriched.forEach((t) => {
+    t.genres.forEach((g) => {
+      if (genreOverTime[g]) {
+        genreOverTime[g][t.month] = (genreOverTime[g][t.month] || 0) + 1;
+      }
+    });
+  });
+
+  const genreSeries = topGenreNames.map((genre) => ({
+    label: genre,
+    data: months.map((m) => genreOverTime[genre][m] || 0),
+  }));
+
+  // Decade over time
+  const decadeSet = new Set();
+  enriched.forEach((t) => { if (t.decade) decadeSet.add(t.decade); });
+  const decadeNames = [...decadeSet].sort();
+
+  const decadeOverTime = {};
+  decadeNames.forEach((d) => { decadeOverTime[d] = {}; });
+  enriched.forEach((t) => {
+    if (t.decade && decadeOverTime[t.decade]) {
+      decadeOverTime[t.decade][t.month] = (decadeOverTime[t.decade][t.month] || 0) + 1;
+    }
+  });
+
+  const decadeSeries = decadeNames.map((decade) => ({
+    label: decade,
+    data: months.map((m) => decadeOverTime[decade][m] || 0),
+  }));
+
+  // Artist timeline (if requested)
+  let artistTimeline = null;
+  let artistName = "";
+  if (artistFilter && artistMap[artistFilter]) {
+    artistName = artistMap[artistFilter].name;
+    const perMonth = {};
+    enriched.forEach((t) => {
+      if (t.artistIds.includes(artistFilter)) {
+        perMonth[t.month] = (perMonth[t.month] || 0) + 1;
+      }
+    });
+    artistTimeline = months.map((m) => perMonth[m] || 0);
+  }
+
+  // Artist list for dropdown (sorted by track count)
+  const artistTrackCounts = {};
+  allTracks.forEach((t) => {
+    t.artistIds.forEach((aid) => {
+      artistTrackCounts[aid] = (artistTrackCounts[aid] || 0) + 1;
+    });
+  });
+
+  const artistList = Object.entries(artistTrackCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 200)
+    .map(([id, count]) => ({
+      id,
+      name: artistMap[id]?.name || "Unknown",
+      trackCount: count,
+    }));
+
+  res.json({
+    months,
+    genreSeries,
+    decadeSeries,
+    artistTimeline,
+    artistName,
+    artistList,
+  });
+});
+
 // ---------- Spotify listening history (live from API, supports time range) ----------
 
 app.get("/api/top-artists", requireAuth, async (req, res) => {
