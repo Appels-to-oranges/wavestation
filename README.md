@@ -8,7 +8,7 @@ A Node.js web app that lets you sign in with your Spotify account and view a das
 
 1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Click **Create App**
-3. Set the **Redirect URI** to `http://localhost:3000/callback`
+3. Set the **Redirect URI** to `http://127.0.0.1:3000/callback`
 4. Note your **Client ID** and **Client Secret**
 
 ### 2. Configure Environment Variables
@@ -24,7 +24,7 @@ Edit `.env` with your Spotify app credentials:
 ```
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:3000/callback
 SESSION_SECRET=any_random_string
 ```
 
@@ -35,7 +35,7 @@ npm install
 node server.js
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with Spotify.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and sign in with Spotify.
 
 ## Features
 
