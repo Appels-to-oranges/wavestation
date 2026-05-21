@@ -1,5 +1,6 @@
 (() => {
   const $ = (sel) => document.querySelector(sel);
+  let currentRange = "short_term";
 
   async function api(path) {
     const res = await fetch(path);
@@ -20,7 +21,41 @@
 
   // ---------- Renderers ----------
 
-  function renderArtists(items) {
+  function renderListeningArtists(items) {
+    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No data</div></div></li>';
+    return items
+      .map(
+        (a, i) => `
+      <li class="stat-item">
+        <span class="stat-rank">${i + 1}</span>
+        <img class="stat-img round" src="${a.images?.[2]?.url || a.images?.[0]?.url || ""}" alt="${a.name}" />
+        <div class="stat-info">
+          <div class="stat-title">${a.name}</div>
+          <div class="stat-sub">${a.genres?.slice(0, 2).join(", ") || "—"}</div>
+        </div>
+      </li>`
+      )
+      .join("");
+  }
+
+  function renderListeningTracks(items) {
+    if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No data</div></div></li>';
+    return items
+      .map(
+        (t, i) => `
+      <li class="stat-item">
+        <span class="stat-rank">${i + 1}</span>
+        <img class="stat-img" src="${t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || ""}" alt="${t.name}" />
+        <div class="stat-info">
+          <div class="stat-title">${t.name}</div>
+          <div class="stat-sub">${t.artists?.map((a) => a.name).join(", ")}</div>
+        </div>
+      </li>`
+      )
+      .join("");
+  }
+
+  function renderCuratedArtists(items) {
     if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No artists match filters</div></div></li>';
     return items
       .map(
@@ -30,14 +65,14 @@
         ${a.image ? `<img class="stat-img round" src="${a.image}" alt="${a.name}" />` : '<div class="stat-img round" style="background:var(--surface-hover)"></div>'}
         <div class="stat-info">
           <div class="stat-title">${a.name}</div>
-          <div class="stat-sub">${a.genres.join(", ") || "—"} · ${a.trackCount} tracks · ${a.totalAppearances} appearances</div>
+          <div class="stat-sub">${a.genres.join(", ") || "—"} · ${a.trackCount} tracks</div>
         </div>
       </li>`
       )
       .join("");
   }
 
-  function renderTracks(items) {
+  function renderCuratedTracks(items) {
     if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No tracks match filters</div></div></li>';
     return items
       .map(
@@ -71,7 +106,7 @@
       .join("");
   }
 
-  function renderAppearances(items, totalPlaylists) {
+  function renderAppearances(items) {
     if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No songs appear in multiple playlists</div></div></li>';
     return items
       .map(
@@ -146,14 +181,28 @@
     `;
   }
 
-  async function loadDashboard() {
+  async function loadListeningHistory() {
+    ["listening-artists", "listening-tracks", "recently-played"].forEach((id) => {
+      document.getElementById(id).innerHTML = skeleton();
+    });
+
+    const [artists, tracks, recent] = await Promise.all([
+      api(`/api/top-artists?range=${currentRange}`),
+      api(`/api/top-tracks?range=${currentRange}`),
+      api("/api/recently-played"),
+    ]);
+
+    if (artists) $("#listening-artists").innerHTML = renderListeningArtists(artists.items || []);
+    if (tracks) $("#listening-tracks").innerHTML = renderListeningTracks(tracks.items || []);
+    if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
+  }
+
+  async function loadPlaylistAnalysis() {
     const genre = $("#genre-filter").value;
     const decade = $("#decade-filter").value;
 
-    const lists = ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown", "playlist-appearances"];
-    lists.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.innerHTML = skeleton();
+    ["top-artists", "top-tracks", "genre-breakdown", "decade-breakdown", "playlist-appearances"].forEach((id) => {
+      document.getElementById(id).innerHTML = skeleton();
     });
 
     const params = new URLSearchParams();
@@ -163,40 +212,26 @@
     const data = await api(`/api/dashboard?${params}`);
     if (!data) return;
 
-    // Library stats (only on first load / no filters)
     if (!genre && !decade) {
       $("#library-stats").innerHTML = renderLibraryStats(data);
     }
 
-    // Populate filter dropdowns (stable, from unfiltered options)
     populateFilters(data.filterOptions, genre, decade);
 
-    // Render cards
-    $("#top-artists").innerHTML = renderArtists(data.topArtists || []);
-    $("#top-tracks").innerHTML = renderTracks(data.topTracks || []);
+    $("#top-artists").innerHTML = renderCuratedArtists(data.topArtists || []);
+    $("#top-tracks").innerHTML = renderCuratedTracks(data.topTracks || []);
     $("#genre-breakdown").innerHTML = renderBarChart(data.genres || [], "genre", "count");
     $("#decade-breakdown").innerHTML = renderBarChart(data.decades || [], "decade", "count");
 
     if (data.appearances?.length) {
       $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${data.totalPlaylists} playlists`;
-      $("#playlist-appearances").innerHTML = renderAppearances(data.appearances, data.totalPlaylists);
+      $("#playlist-appearances").innerHTML = renderAppearances(data.appearances);
     } else {
       $("#playlist-subtitle").textContent = "";
       $("#playlist-appearances").innerHTML = '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No songs appear in multiple playlists</div></div></li>';
     }
 
-    // Show/hide clear button
     $("#filter-clear").style.display = genre || decade ? "" : "none";
-  }
-
-  async function loadRecent() {
-    const el = document.getElementById("recently-played");
-    if (el) el.innerHTML = skeleton();
-
-    const recent = await api("/api/recently-played");
-    if (recent) {
-      el.innerHTML = renderRecent(recent.items || []);
-    }
   }
 
   function populateFilters(options, currentGenre, currentDecade) {
@@ -212,13 +247,22 @@
 
   // ---------- Event listeners ----------
 
-  $("#genre-filter").addEventListener("change", loadDashboard);
-  $("#decade-filter").addEventListener("change", loadDashboard);
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentRange = btn.dataset.range;
+      loadListeningHistory();
+    });
+  });
+
+  $("#genre-filter").addEventListener("change", loadPlaylistAnalysis);
+  $("#decade-filter").addEventListener("change", loadPlaylistAnalysis);
   $("#filter-clear").addEventListener("click", () => {
     $("#genre-filter").value = "";
     $("#decade-filter").value = "";
     $("#filter-clear").style.display = "none";
-    loadDashboard();
+    loadPlaylistAnalysis();
   });
 
   // ---------- Init ----------
@@ -231,8 +275,8 @@
     }
 
     loadProfile();
-    loadDashboard();
-    loadRecent();
+    loadListeningHistory();
+    loadPlaylistAnalysis();
   }
 
   init();

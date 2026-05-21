@@ -399,7 +399,33 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
   });
 });
 
-// ---------- Recently played (still live from Spotify API) ----------
+// ---------- Spotify listening history (live from API, supports time range) ----------
+
+app.get("/api/top-artists", requireAuth, async (req, res) => {
+  const range = req.query.range || "medium_term";
+  try {
+    const data = await spotifyApi(
+      `/me/top/artists?limit=20&time_range=${range}`,
+      req.session.accessToken
+    );
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/top-tracks", requireAuth, async (req, res) => {
+  const range = req.query.range || "medium_term";
+  try {
+    const data = await spotifyApi(
+      `/me/top/tracks?limit=20&time_range=${range}`,
+      req.session.accessToken
+    );
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get("/api/recently-played", requireAuth, async (req, res) => {
   try {
