@@ -364,7 +364,7 @@
       ).join("");
   }
 
-  async function reloadGenreChart() {
+  async function reloadTrendCharts() {
     const genre = $("#trend-genre-filter").value;
     const decade = $("#trend-decade-filter").value;
     const params = new URLSearchParams();
@@ -374,6 +374,7 @@
     const data = await api(`/api/trends?${params}`);
     if (!data) return;
     renderGenreChart(data);
+    renderDecadeChart(data);
   }
 
   async function loadArtistTimeline(artistId) {
@@ -434,8 +435,8 @@
     loadPlaylistAnalysis();
   });
 
-  $("#trend-genre-filter").addEventListener("change", reloadGenreChart);
-  $("#trend-decade-filter").addEventListener("change", reloadGenreChart);
+  $("#trend-genre-filter").addEventListener("change", reloadTrendCharts);
+  $("#trend-decade-filter").addEventListener("change", reloadTrendCharts);
 
   $("#artist-picker-select").addEventListener("change", (e) => {
     loadArtistTimeline(e.target.value);

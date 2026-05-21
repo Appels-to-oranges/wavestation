@@ -464,19 +464,19 @@ app.get("/api/trends", requireAuth, (req, res) => {
     return { months: months.slice(first, last + 1), data: dataArr.slice(first, last + 1) };
   }
 
-  // Collect all months
-  const monthSet = new Set();
-  enriched.forEach((t) => monthSet.add(t.month));
-  const allMonths = [...monthSet].sort();
+  // Apply genre/decade filters
+  let filtered = enriched;
+  if (decadeFilter) filtered = filtered.filter((t) => t.decade === decadeFilter);
+  if (genreFilter) filtered = filtered.filter((t) => t.genres.includes(genreFilter));
 
-  // Apply genre/decade filters for the genre chart
-  let genreFiltered = enriched;
-  if (decadeFilter) genreFiltered = genreFiltered.filter((t) => t.decade === decadeFilter);
-  if (genreFilter) genreFiltered = genreFiltered.filter((t) => t.genres.includes(genreFilter));
+  // Build month list from filtered data only
+  const filteredMonthSet = new Set();
+  filtered.forEach((t) => filteredMonthSet.add(t.month));
+  const filteredMonths = [...filteredMonthSet].sort();
 
-  // Genre over time
+  // Genre over time (uses filtered tracks + filtered months)
   const genreTotals = {};
-  genreFiltered.forEach((t) => {
+  filtered.forEach((t) => {
     t.genres.forEach((g) => { genreTotals[g] = (genreTotals[g] || 0) + 1; });
   });
   const topGenreNames = genreFilter
@@ -485,7 +485,7 @@ app.get("/api/trends", requireAuth, (req, res) => {
 
   const genreOverTime = {};
   topGenreNames.forEach((g) => { genreOverTime[g] = {}; });
-  genreFiltered.forEach((t) => {
+  filtered.forEach((t) => {
     t.genres.forEach((g) => {
       if (genreOverTime[g]) {
         genreOverTime[g][t.month] = (genreOverTime[g][t.month] || 0) + 1;
@@ -495,18 +495,18 @@ app.get("/api/trends", requireAuth, (req, res) => {
 
   const rawGenreSeries = topGenreNames.map((genre) => ({
     label: genre,
-    data: allMonths.map((m) => genreOverTime[genre][m] || 0),
+    data: filteredMonths.map((m) => genreOverTime[genre][m] || 0),
   }));
-  const genreTrimmed = trimSeries(allMonths, rawGenreSeries);
+  const genreTrimmed = trimSeries(filteredMonths, rawGenreSeries);
 
-  // Decade over time (unfiltered — shows all decades)
+  // Decade over time (also uses filtered tracks)
   const decadeSet = new Set();
-  enriched.forEach((t) => { if (t.decade) decadeSet.add(t.decade); });
+  filtered.forEach((t) => { if (t.decade) decadeSet.add(t.decade); });
   const decadeNames = [...decadeSet].sort();
 
   const decadeOverTime = {};
   decadeNames.forEach((d) => { decadeOverTime[d] = {}; });
-  enriched.forEach((t) => {
+  filtered.forEach((t) => {
     if (t.decade && decadeOverTime[t.decade]) {
       decadeOverTime[t.decade][t.month] = (decadeOverTime[t.decade][t.month] || 0) + 1;
     }
@@ -514,26 +514,27 @@ app.get("/api/trends", requireAuth, (req, res) => {
 
   const rawDecadeSeries = decadeNames.map((decade) => ({
     label: decade,
-    data: allMonths.map((m) => decadeOverTime[decade][m] || 0),
+    data: filteredMonths.map((m) => decadeOverTime[decade][m] || 0),
   }));
-  const decadeTrimmed = trimSeries(allMonths, rawDecadeSeries);
+  const decadeTrimmed = trimSeries(filteredMonths, rawDecadeSeries);
 
-  // Artist timeline (if requested)
+  // Artist timeline (if requested) — uses full enriched data, not filtered
   let artistTimeline = null;
   let artistMonths = null;
   let artistName = "";
   if (artistFilter && artistMap[artistFilter]) {
     artistName = artistMap[artistFilter].name;
     const perMonth = {};
+    const artistMonthSet = new Set();
     enriched.forEach((t) => {
       if (t.artistIds.includes(artistFilter)) {
         perMonth[t.month] = (perMonth[t.month] || 0) + 1;
+        artistMonthSet.add(t.month);
       }
     });
-    const rawData = allMonths.map((m) => perMonth[m] || 0);
-    const trimmed = trimFlat(allMonths, rawData);
-    artistMonths = trimmed.months;
-    artistTimeline = trimmed.data;
+    const sortedArtistMonths = [...artistMonthSet].sort();
+    artistMonths = sortedArtistMonths;
+    artistTimeline = sortedArtistMonths.map((m) => perMonth[m] || 0);
   }
 
   // Filter option lists for the trends section
