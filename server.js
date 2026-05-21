@@ -18,6 +18,8 @@ const SCOPES = [
   "user-top-read",
   "user-read-recently-played",
   "user-library-read",
+  "playlist-read-private",
+  "playlist-read-collaborative",
 ].join(" ");
 
 app.use(
@@ -174,6 +176,66 @@ app.get("/api/genre-breakdown", requireAuth, async (req, res) => {
 
     res.json(sorted);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
+  try {
+    const token = req.session.accessToken;
+
+    // Fetch all user playlists (paginated)
+    const playlists = [];
+    let url = "/me/playlists?limit=50";
+    while (url) {
+      const page = await spotifyApi(url, token);
+      playlists.push(...page.items);
+      url = page.next
+        ? page.next.replace("https://api.spotify.com/v1", "")
+        : null;
+    }
+
+    // Fetch tracks from each playlist and count appearances per track ID
+    const trackCounts = {};
+    const trackMeta = {};
+
+    for (const pl of playlists) {
+      let tracksUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(name),album(images))),next&limit=100`;
+      while (tracksUrl) {
+        const page = await spotifyApi(tracksUrl, token);
+        for (const item of page.items) {
+          const t = item.track;
+          if (!t || !t.id) continue;
+          trackCounts[t.id] = (trackCounts[t.id] || 0) + 1;
+          if (!trackMeta[t.id]) {
+            trackMeta[t.id] = {
+              name: t.name,
+              artists: t.artists?.map((a) => a.name).join(", "),
+              image:
+                t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || "",
+            };
+          }
+        }
+        tracksUrl = page.next
+          ? page.next.replace("https://api.spotify.com/v1", "")
+          : null;
+      }
+    }
+
+    const sorted = Object.entries(trackCounts)
+      .filter(([, count]) => count >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([id, count]) => ({
+        id,
+        count,
+        totalPlaylists: playlists.length,
+        ...trackMeta[id],
+      }));
+
+    res.json({ items: sorted, totalPlaylists: playlists.length });
+  } catch (err) {
+    console.error("Playlist appearances error:", err.response?.data || err.message);
     res.status(500).json({ error: err.message });
   }
 });

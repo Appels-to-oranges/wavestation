@@ -141,6 +141,7 @@ body {
 /* Time range tabs */
 .time-range-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 2rem;
 }
@@ -190,6 +191,13 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
   font-size: 0.75rem;
+}
+
+.card-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
 }
 
 /* List items (tracks / artists / recent) */

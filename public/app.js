@@ -63,6 +63,25 @@
       .join("");
   }
 
+  function renderPlaylistAppearances(data) {
+    if (!data.items.length) {
+      return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No songs appear in multiple playlists</div></div></li>';
+    }
+    return data.items
+      .map(
+        (t, i) => `
+      <li class="stat-item">
+        <span class="stat-rank">${i + 1}</span>
+        <img class="stat-img" src="${t.image}" alt="${t.name}" />
+        <div class="stat-info">
+          <div class="stat-title">${t.name}</div>
+          <div class="stat-sub">${t.artists} · in ${t.count} of ${t.totalPlaylists} playlists</div>
+        </div>
+      </li>`
+      )
+      .join("");
+  }
+
   function renderRecent(items) {
     return items
       .map((r) => {
@@ -96,23 +115,28 @@
   }
 
   async function loadStats() {
-    const lists = ["top-artists", "top-tracks", "genre-breakdown", "recently-played"];
+    const lists = ["top-artists", "top-tracks", "genre-breakdown", "recently-played", "playlist-appearances"];
     lists.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = skeleton();
     });
 
-    const [artists, tracks, genres, recent] = await Promise.all([
+    const [artists, tracks, genres, recent, playlists] = await Promise.all([
       api(`/api/top-artists?range=${currentRange}`),
       api(`/api/top-tracks?range=${currentRange}`),
       api(`/api/genre-breakdown?range=${currentRange}`),
       api("/api/recently-played"),
+      api("/api/playlist-appearances"),
     ]);
 
     if (artists) $("#top-artists").innerHTML = renderArtists(artists.items || []);
     if (tracks) $("#top-tracks").innerHTML = renderTracks(tracks.items || []);
     if (genres) $("#genre-breakdown").innerHTML = renderGenres(genres || []);
     if (recent) $("#recently-played").innerHTML = renderRecent(recent.items || []);
+    if (playlists) {
+      $("#playlist-subtitle").textContent = `Songs appearing in 2+ of your ${playlists.totalPlaylists} playlists`;
+      $("#playlist-appearances").innerHTML = renderPlaylistAppearances(playlists);
+    }
   }
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
