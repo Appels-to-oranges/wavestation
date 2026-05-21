@@ -33,6 +33,9 @@ app.use(
 
 app.use(express.static(path.join(__dirname, "public")));
 
+// In-memory store: userId -> { tracks, artists, playlists, scannedAt }
+const userDataStore = new Map();
+
 function requireAuth(req, res, next) {
   if (!req.session.accessToken) {
     return res.status(401).json({ error: "Not authenticated" });
@@ -93,7 +96,7 @@ app.get("/callback", async (req, res) => {
     req.session.refreshToken = tokenRes.data.refresh_token;
     req.session.tokenExpiry = Date.now() + tokenRes.data.expires_in * 1000;
 
-    res.redirect("/dashboard.html");
+    res.redirect("/loading.html");
   } catch (err) {
     console.error("Token exchange failed:", err.response?.data || err.message);
     res.status(500).send("Authentication failed");
@@ -101,46 +104,302 @@ app.get("/callback", async (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
+  if (req.session.userId) userDataStore.delete(req.session.userId);
   req.session.destroy();
   res.redirect("/");
 });
 
-// ---------- API routes ----------
+// ---------- Scan endpoint (SSE) ----------
 
-app.get("/api/me", requireAuth, async (req, res) => {
+app.get("/api/scan", requireAuth, async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  function send(type, data) {
+    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+  }
+
   try {
-    const data = await spotifyApi("/me", req.session.accessToken);
-    res.json(data);
+    const token = req.session.accessToken;
+    const me = await spotifyApi("/me", token);
+    const userId = me.id;
+    req.session.userId = userId;
+
+    if (userDataStore.has(userId) && Date.now() - userDataStore.get(userId).scannedAt < 600000) {
+      send("done", {});
+      return res.end();
+    }
+
+    send("progress", { phase: "Fetching your playlists…", percent: 0 });
+
+    // 1. Fetch all user playlists
+    const allPlaylists = [];
+    let plUrl = "/me/playlists?limit=50";
+    while (plUrl) {
+      const page = await spotifyApi(plUrl, token);
+      allPlaylists.push(...page.items);
+      plUrl = page.next ? page.next.replace("https://api.spotify.com/v1", "") : null;
+    }
+
+    const ownedPlaylists = allPlaylists.filter((pl) => pl.owner?.id === userId);
+    const excluded = allPlaylists.length - ownedPlaylists.length;
+
+    send("progress", {
+      phase: `Found ${ownedPlaylists.length} playlists (${excluded} followed excluded). Scanning tracks…`,
+      percent: 5,
+    });
+
+    // 2. Scan all tracks from owned playlists (batches of 5)
+    const trackMap = {};    // trackId -> { id, name, artistIds[], albumName, albumImage, releaseDate, playlistCount }
+    const artistIdSet = new Set();
+    let processed = 0;
+    const scanWeight = 70; // 5-75% for playlist scanning
+
+    async function processPlaylist(pl) {
+      let tUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(id,name),album(name,images,release_date))),next&limit=100`;
+      while (tUrl) {
+        const page = await spotifyApi(tUrl, token);
+        for (const item of page.items) {
+          const t = item.track;
+          if (!t || !t.id) continue;
+
+          if (!trackMap[t.id]) {
+            trackMap[t.id] = {
+              id: t.id,
+              name: t.name,
+              artistIds: t.artists?.map((a) => a.id) || [],
+              artistNames: t.artists?.map((a) => a.name) || [],
+              albumName: t.album?.name || "",
+              albumImage: t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || "",
+              releaseDate: t.album?.release_date || "",
+              playlistCount: 0,
+            };
+            t.artists?.forEach((a) => artistIdSet.add(a.id));
+          }
+          trackMap[t.id].playlistCount++;
+        }
+        tUrl = page.next ? page.next.replace("https://api.spotify.com/v1", "") : null;
+      }
+      processed++;
+      const percent = Math.round(5 + (processed / ownedPlaylists.length) * scanWeight);
+      send("progress", {
+        phase: `Scanning playlist ${processed} of ${ownedPlaylists.length}…`,
+        percent,
+      });
+    }
+
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < ownedPlaylists.length; i += BATCH_SIZE) {
+      const batch = ownedPlaylists.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(processPlaylist));
+    }
+
+    // 3. Fetch artist details for genres (Spotify allows 50 IDs per request)
+    send("progress", { phase: "Fetching artist details…", percent: 76 });
+
+    const artistMap = {};
+    const artistIds = [...artistIdSet].filter(Boolean);
+    const artistBatches = [];
+    for (let i = 0; i < artistIds.length; i += 50) {
+      artistBatches.push(artistIds.slice(i, i + 50));
+    }
+
+    for (let i = 0; i < artistBatches.length; i++) {
+      const ids = artistBatches[i].join(",");
+      const data = await spotifyApi(`/artists?ids=${ids}`, token);
+      data.artists.forEach((a) => {
+        if (!a) return;
+        artistMap[a.id] = {
+          id: a.id,
+          name: a.name,
+          genres: a.genres || [],
+          image: a.images?.[2]?.url || a.images?.[0]?.url || "",
+          popularity: a.popularity || 0,
+        };
+      });
+      const percent = Math.round(76 + ((i + 1) / artistBatches.length) * 19);
+      send("progress", {
+        phase: `Fetching artist details… (${Math.min((i + 1) * 50, artistIds.length)} of ${artistIds.length})`,
+        percent,
+      });
+    }
+
+    // 4. Fetch library counts
+    send("progress", { phase: "Fetching library stats…", percent: 96 });
+    let savedTracks = 0, savedAlbums = 0;
+    try {
+      const [tr, al] = await Promise.all([
+        spotifyApi("/me/tracks?limit=1", token),
+        spotifyApi("/me/albums?limit=1", token),
+      ]);
+      savedTracks = tr.total || 0;
+      savedAlbums = al.total || 0;
+    } catch (_) { /* non-critical */ }
+
+    // 5. Store everything
+    userDataStore.set(userId, {
+      tracks: trackMap,
+      artists: artistMap,
+      totalPlaylists: ownedPlaylists.length,
+      savedTracks,
+      savedAlbums,
+      scannedAt: Date.now(),
+    });
+
+    send("progress", { phase: "Done!", percent: 100 });
+    send("done", {});
+    res.end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Scan error:", err.response?.data || err.message);
+    send("error", { message: err.message });
+    res.end();
   }
 });
 
-app.get("/api/top-artists", requireAuth, async (req, res) => {
-  const range = req.query.range || "medium_term";
-  try {
-    const data = await spotifyApi(
-      `/me/top/artists?limit=20&time_range=${range}`,
-      req.session.accessToken
-    );
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// ---------- Dashboard endpoint ----------
+
+app.get("/api/scan-status", requireAuth, (req, res) => {
+  const userId = req.session.userId;
+  const hasData = userId && userDataStore.has(userId);
+  res.json({ scanned: hasData });
 });
 
-app.get("/api/top-tracks", requireAuth, async (req, res) => {
-  const range = req.query.range || "medium_term";
-  try {
-    const data = await spotifyApi(
-      `/me/top/tracks?limit=20&time_range=${range}`,
-      req.session.accessToken
-    );
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+app.get("/api/dashboard", requireAuth, (req, res) => {
+  const userId = req.session.userId;
+  if (!userId || !userDataStore.has(userId)) {
+    return res.status(400).json({ error: "No scan data. Please scan first." });
   }
+
+  const store = userDataStore.get(userId);
+  const { tracks: trackMap, artists: artistMap } = store;
+  const genreFilter = req.query.genre || "";
+  const decadeFilter = req.query.decade || "";
+
+  let tracks = Object.values(trackMap);
+
+  // Resolve genres for each track via their artists
+  tracks = tracks.map((t) => {
+    const genres = new Set();
+    t.artistIds.forEach((aid) => {
+      artistMap[aid]?.genres?.forEach((g) => genres.add(g));
+    });
+    const year = parseInt(t.releaseDate?.substring(0, 4), 10) || 0;
+    const decade = year ? `${Math.floor(year / 10) * 10}s` : null;
+    return { ...t, genres: [...genres], decade };
+  });
+
+  // Apply filters
+  if (decadeFilter) {
+    tracks = tracks.filter((t) => t.decade === decadeFilter);
+  }
+  if (genreFilter) {
+    tracks = tracks.filter((t) => t.genres.includes(genreFilter));
+  }
+
+  // Top tracks by playlist appearances
+  const topTracks = [...tracks]
+    .sort((a, b) => b.playlistCount - a.playlistCount)
+    .slice(0, 20)
+    .map((t) => ({
+      name: t.name,
+      artists: t.artistNames.join(", "),
+      image: t.albumImage,
+      playlistCount: t.playlistCount,
+      decade: t.decade,
+    }));
+
+  // Top artists by number of tracks in playlists
+  const artistTrackCount = {};
+  const artistPlaylistCount = {};
+  tracks.forEach((t) => {
+    t.artistIds.forEach((aid) => {
+      artistTrackCount[aid] = (artistTrackCount[aid] || 0) + 1;
+      artistPlaylistCount[aid] = (artistPlaylistCount[aid] || 0) + t.playlistCount;
+    });
+  });
+
+  const topArtists = Object.entries(artistPlaylistCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([id, count]) => {
+      const a = artistMap[id] || {};
+      return {
+        name: a.name || "Unknown",
+        image: a.image || "",
+        genres: (a.genres || []).slice(0, 2),
+        trackCount: artistTrackCount[id] || 0,
+        totalAppearances: count,
+      };
+    });
+
+  // Genre breakdown
+  const genreCount = {};
+  tracks.forEach((t) => {
+    t.genres.forEach((g) => {
+      genreCount[g] = (genreCount[g] || 0) + 1;
+    });
+  });
+  const genres = Object.entries(genreCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([genre, count]) => ({ genre, count }));
+
+  // Decade breakdown
+  const decadeCount = {};
+  tracks.forEach((t) => {
+    if (t.decade) decadeCount[t.decade] = (decadeCount[t.decade] || 0) + 1;
+  });
+  const decades = Object.entries(decadeCount)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([decade, count]) => ({ decade, count }));
+
+  // Playlist appearances (songs in 2+)
+  const appearances = [...tracks]
+    .filter((t) => t.playlistCount >= 2)
+    .sort((a, b) => b.playlistCount - a.playlistCount)
+    .slice(0, 20)
+    .map((t) => ({
+      name: t.name,
+      artists: t.artistNames.join(", "),
+      image: t.albumImage,
+      count: t.playlistCount,
+      totalPlaylists: store.totalPlaylists,
+    }));
+
+  // Available filter options (computed from unfiltered data for stable dropdowns)
+  const allTracks = Object.values(trackMap);
+  const allGenres = new Set();
+  const allDecades = new Set();
+  allTracks.forEach((t) => {
+    t.artistIds.forEach((aid) => {
+      artistMap[aid]?.genres?.forEach((g) => allGenres.add(g));
+    });
+    const yr = parseInt(t.releaseDate?.substring(0, 4), 10) || 0;
+    if (yr) allDecades.add(`${Math.floor(yr / 10) * 10}s`);
+  });
+
+  res.json({
+    topTracks,
+    topArtists,
+    genres,
+    decades,
+    appearances,
+    savedTracks: store.savedTracks,
+    savedAlbums: store.savedAlbums,
+    totalPlaylists: store.totalPlaylists,
+    totalUniqueTracksScanned: allTracks.length,
+    totalUniqueArtistsScanned: Object.keys(artistMap).length,
+    filterOptions: {
+      genres: [...allGenres].sort(),
+      decades: [...allDecades].sort(),
+    },
+    activeFilters: { genre: genreFilter, decade: decadeFilter },
+  });
 });
+
+// ---------- Recently played (still live from Spotify API) ----------
 
 app.get("/api/recently-played", requireAuth, async (req, res) => {
   try {
@@ -154,172 +413,13 @@ app.get("/api/recently-played", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/genre-breakdown", requireAuth, async (req, res) => {
-  const range = req.query.range || "medium_term";
+app.get("/api/me", requireAuth, async (req, res) => {
   try {
-    const artists = await spotifyApi(
-      `/me/top/artists?limit=50&time_range=${range}`,
-      req.session.accessToken
-    );
-
-    const genreCount = {};
-    artists.items.forEach((artist) => {
-      artist.genres.forEach((genre) => {
-        genreCount[genre] = (genreCount[genre] || 0) + 1;
-      });
-    });
-
-    const sorted = Object.entries(genreCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([genre, count]) => ({ genre, count }));
-
-    res.json(sorted);
+    const data = await spotifyApi("/me", req.session.accessToken);
+    req.session.userId = data.id;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/decade-breakdown", requireAuth, async (req, res) => {
-  const range = req.query.range || "medium_term";
-  try {
-    const data = await spotifyApi(
-      `/me/top/tracks?limit=50&time_range=${range}`,
-      req.session.accessToken
-    );
-
-    const decadeCount = {};
-    data.items.forEach((track) => {
-      const year = parseInt(track.album?.release_date?.substring(0, 4), 10);
-      if (!year) return;
-      const decade = Math.floor(year / 10) * 10;
-      const label = `${decade}s`;
-      decadeCount[label] = (decadeCount[label] || 0) + 1;
-    });
-
-    const sorted = Object.entries(decadeCount)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([decade, count]) => ({ decade, count }));
-
-    res.json(sorted);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/library-stats", requireAuth, async (req, res) => {
-  try {
-    const [tracks, albums] = await Promise.all([
-      spotifyApi("/me/tracks?limit=1", req.session.accessToken),
-      spotifyApi("/me/albums?limit=1", req.session.accessToken),
-    ]);
-    res.json({
-      savedTracks: tracks.total || 0,
-      savedAlbums: albums.total || 0,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/playlist-appearances", requireAuth, async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  function sendEvent(type, data) {
-    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
-  }
-
-  try {
-    if (req.session.playlistCache && Date.now() - req.session.playlistCacheTime < 300000) {
-      sendEvent("done", req.session.playlistCache);
-      return res.end();
-    }
-
-    const token = req.session.accessToken;
-    const me = await spotifyApi("/me", token);
-    const userId = me.id;
-
-    sendEvent("progress", { phase: "Fetching playlists…", percent: 0 });
-
-    const allPlaylists = [];
-    let url = "/me/playlists?limit=50";
-    while (url) {
-      const page = await spotifyApi(url, token);
-      allPlaylists.push(...page.items);
-      url = page.next
-        ? page.next.replace("https://api.spotify.com/v1", "")
-        : null;
-    }
-
-    const playlists = allPlaylists.filter((pl) => pl.owner?.id === userId);
-
-    sendEvent("progress", {
-      phase: `Scanning ${playlists.length} of your playlists (${allPlaylists.length - playlists.length} followed playlists excluded)…`,
-      percent: 5,
-    });
-
-    const trackCounts = {};
-    const trackMeta = {};
-    let processed = 0;
-
-    async function processPlaylist(pl) {
-      let tracksUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(name),album(images))),next&limit=100`;
-      while (tracksUrl) {
-        const page = await spotifyApi(tracksUrl, token);
-        for (const item of page.items) {
-          const t = item.track;
-          if (!t || !t.id) continue;
-          trackCounts[t.id] = (trackCounts[t.id] || 0) + 1;
-          if (!trackMeta[t.id]) {
-            trackMeta[t.id] = {
-              name: t.name,
-              artists: t.artists?.map((a) => a.name).join(", "),
-              image:
-                t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || "",
-            };
-          }
-        }
-        tracksUrl = page.next
-          ? page.next.replace("https://api.spotify.com/v1", "")
-          : null;
-      }
-      processed++;
-      const percent = Math.round(5 + (processed / playlists.length) * 95);
-      sendEvent("progress", {
-        phase: `Scanning playlist ${processed} of ${playlists.length}…`,
-        percent,
-      });
-    }
-
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < playlists.length; i += BATCH_SIZE) {
-      const batch = playlists.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(processPlaylist));
-    }
-
-    const sorted = Object.entries(trackCounts)
-      .filter(([, count]) => count >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
-      .map(([id, count]) => ({
-        id,
-        count,
-        totalPlaylists: playlists.length,
-        ...trackMeta[id],
-      }));
-
-    const result = { items: sorted, totalPlaylists: playlists.length };
-    req.session.playlistCache = result;
-    req.session.playlistCacheTime = Date.now();
-    sendEvent("done", result);
-    res.end();
-  } catch (err) {
-    console.error("Playlist appearances error:", err.response?.data || err.message);
-    sendEvent("error", { message: err.message });
-    res.end();
   }
 });
 

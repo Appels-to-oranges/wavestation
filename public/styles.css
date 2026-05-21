@@ -78,6 +78,22 @@ body {
   transform: scale(1.03);
 }
 
+.scan-progress-wrapper {
+  margin-top: 0.5rem;
+}
+
+.scan-percent {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.profile-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 /* ---------- Dashboard layout ---------- */
 .dashboard {
   max-width: 1200px;
