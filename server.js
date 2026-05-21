@@ -158,12 +158,14 @@ app.get("/api/scan", requireAuth, async (req, res) => {
     const scanWeight = 70; // 5-75% for playlist scanning
 
     async function processPlaylist(pl) {
-      let tUrl = `/playlists/${pl.id}/tracks?fields=items(track(id,name,artists(id,name),album(name,images,release_date))),next&limit=100`;
+      let tUrl = `/playlists/${pl.id}/tracks?fields=items(added_at,track(id,name,artists(id,name),album(name,images,release_date))),next&limit=100`;
       while (tUrl) {
         const page = await spotifyApi(tUrl, token);
         for (const item of page.items) {
           const t = item.track;
           if (!t || !t.id) continue;
+
+          const addedAt = item.added_at || null;
 
           if (!trackMap[t.id]) {
             trackMap[t.id] = {
@@ -175,8 +177,14 @@ app.get("/api/scan", requireAuth, async (req, res) => {
               albumImage: t.album?.images?.[2]?.url || t.album?.images?.[0]?.url || "",
               releaseDate: t.album?.release_date || "",
               playlistCount: 0,
+              firstAdded: addedAt,
+              lastAdded: addedAt,
             };
             t.artists?.forEach((a) => artistIdSet.add(a.id));
+          }
+          if (addedAt) {
+            if (!trackMap[t.id].firstAdded || addedAt < trackMap[t.id].firstAdded) trackMap[t.id].firstAdded = addedAt;
+            if (!trackMap[t.id].lastAdded || addedAt > trackMap[t.id].lastAdded) trackMap[t.id].lastAdded = addedAt;
           }
           trackMap[t.id].playlistCount++;
         }
@@ -308,6 +316,7 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
       image: t.albumImage,
       playlistCount: t.playlistCount,
       decade: t.decade,
+      firstAdded: t.firstAdded,
     }));
 
   // Top artists by number of tracks in playlists
@@ -366,6 +375,7 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
       image: t.albumImage,
       count: t.playlistCount,
       totalPlaylists: store.totalPlaylists,
+      firstAdded: t.firstAdded,
     }));
 
   // Available filter options (computed from unfiltered data for stable dropdowns)

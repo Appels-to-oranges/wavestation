@@ -72,6 +72,11 @@
       .join("");
   }
 
+  function formatDate(iso) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
   function renderCuratedTracks(items) {
     if (!items.length) return '<li class="stat-item"><div class="stat-info"><div class="stat-sub">No tracks match filters</div></div></li>';
     return items
@@ -82,7 +87,7 @@
         <img class="stat-img" src="${t.image}" alt="${t.name}" />
         <div class="stat-info">
           <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists} · in ${t.playlistCount} playlists</div>
+          <div class="stat-sub">${t.artists} · in ${t.playlistCount} playlists${t.firstAdded ? ` · added ${formatDate(t.firstAdded)}` : ""}</div>
         </div>
       </li>`
       )
@@ -116,7 +121,7 @@
         <img class="stat-img" src="${t.image}" alt="${t.name}" />
         <div class="stat-info">
           <div class="stat-title">${t.name}</div>
-          <div class="stat-sub">${t.artists} · in ${t.count} of ${t.totalPlaylists} playlists</div>
+          <div class="stat-sub">${t.artists} · in ${t.count} of ${t.totalPlaylists} playlists${t.firstAdded ? ` · added ${formatDate(t.firstAdded)}` : ""}</div>
         </div>
       </li>`
       )
