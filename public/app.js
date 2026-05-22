@@ -65,7 +65,7 @@
         ${a.image ? `<img class="stat-img round" src="${a.image}" alt="${a.name}" />` : '<div class="stat-img round" style="background:var(--surface-hover)"></div>'}
         <div class="stat-info">
           <div class="stat-title">${a.name}</div>
-          <div class="stat-sub">${a.genres.join(", ") || "—"} · ${a.trackCount} tracks</div>
+          <div class="stat-sub">${a.genres.join(", ") || "—"} · ${a.trackCount} tracks · ${a.totalAppearances} appearances</div>
         </div>
       </li>`
       )
