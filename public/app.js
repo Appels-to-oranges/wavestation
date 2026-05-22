@@ -96,7 +96,7 @@
 
   function renderBarChart(items, labelKey, countKey) {
     if (!items.length) return '<li class="genre-item"><span class="genre-label">No data</span></li>';
-    const max = items[0]?.[countKey] || 1;
+    const max = Math.max(...items.map((g) => g[countKey])) || 1;
     return items
       .map(
         (g) => `
@@ -228,8 +228,8 @@
   // ---------- Chart helpers ----------
 
   const CHART_COLORS = [
-    "#1db954", "#1ed760", "#4ade80", "#22d3ee", "#818cf8",
-    "#c084fc", "#f472b6", "#fb923c", "#facc15", "#34d399",
+    "#1db954", "#818cf8", "#f472b6", "#fb923c", "#22d3ee",
+    "#facc15", "#c084fc", "#34d399", "#f87171", "#38bdf8",
   ];
 
   const chartDefaults = {
