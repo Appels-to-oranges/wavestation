@@ -11,7 +11,7 @@
     <!-- Profile bar -->
     <div class="profile-bar">
       <div class="profile-info" id="profile-info">
-        <div class="skeleton" style="width:48px;height:48px;border-radius:50%"></div>
+        <div class="skeleton" style="width:40px;height:40px;border-radius:50%"></div>
         <span class="profile-name">Loading…</span>
       </div>
       <div class="profile-actions">
@@ -27,8 +27,8 @@
     <div class="section-header">
       <h2 class="section-title">Listening History</h2>
       <div class="time-range-tabs">
-        <button class="tab-btn active" data-range="short_term">Last 4 weeks</button>
-        <button class="tab-btn" data-range="medium_term">Last 6 months</button>
+        <button class="tab-btn active" data-range="short_term">4 weeks</button>
+        <button class="tab-btn" data-range="medium_term">6 months</button>
         <button class="tab-btn" data-range="long_term">All time</button>
       </div>
     </div>
@@ -51,7 +51,7 @@
     </div>
 
     <!-- ===== Playlist Analysis Section ===== -->
-    <div class="section-header" style="margin-top:2rem">
+    <div class="section-header" style="margin-top:1.5rem">
       <h2 class="section-title">Playlist Analysis</h2>
       <div class="filter-bar">
         <select class="filter-select" id="genre-filter">
@@ -60,7 +60,7 @@
         <select class="filter-select" id="decade-filter">
           <option value="">All decades</option>
         </select>
-        <button class="filter-clear" id="filter-clear" style="display:none">Clear filters</button>
+        <button class="filter-clear" id="filter-clear" style="display:none">Clear</button>
       </div>
     </div>
 
@@ -84,33 +84,32 @@
         <h2>Decade Breakdown</h2>
         <ul class="genre-list" id="decade-breakdown"></ul>
       </div>
-
     </div>
+
     <!-- ===== Trends Section ===== -->
-    <div class="section-header" style="margin-top:2rem">
+    <div class="section-header" style="margin-top:1.5rem">
       <h2 class="section-title">Trends Over Time</h2>
+      <div class="chart-filters">
+        <div class="searchable-select" id="trend-genre-picker">
+          <input type="text" class="searchable-input" placeholder="Search genres…" autocomplete="off" />
+          <div class="searchable-dropdown"></div>
+          <input type="hidden" id="trend-genre-filter" value="" />
+        </div>
+        <select class="filter-select" id="trend-decade-filter">
+          <option value="">All decades</option>
+        </select>
+      </div>
     </div>
 
     <div class="sections-grid trends-grid">
-      <div class="card card-wide">
+      <div class="card">
         <h2>Genre Trends</h2>
-        <div class="chart-filters">
-          <div class="searchable-select" id="trend-genre-picker">
-            <input type="text" class="searchable-input" placeholder="Search genres…" autocomplete="off" />
-            <div class="searchable-dropdown"></div>
-            <input type="hidden" id="trend-genre-filter" value="" />
-          </div>
-          <select class="filter-select" id="trend-decade-filter">
-            <option value="">All decades</option>
-          </select>
-        </div>
-        <p class="card-subtitle" style="margin-top:-0.5rem;margin-bottom:0.5rem;font-size:0.75rem;color:#666">Filter applies to both Genre and Decade charts</p>
         <div class="chart-container">
           <canvas id="genre-trends-chart"></canvas>
         </div>
       </div>
 
-      <div class="card card-wide">
+      <div class="card">
         <h2>Decade Trends</h2>
         <div class="chart-container">
           <canvas id="decade-trends-chart"></canvas>
@@ -127,7 +126,7 @@
         <div class="chart-container">
           <canvas id="artist-timeline-chart"></canvas>
         </div>
-        <p class="card-subtitle" id="artist-timeline-empty" style="text-align:center;margin-top:1rem">Select an artist above to see their timeline</p>
+        <p class="card-subtitle" id="artist-timeline-empty" style="text-align:center;margin-top:0.75rem">Select an artist above to see their timeline</p>
       </div>
     </div>
   </div>

@@ -309,7 +309,7 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
   // Top tracks by playlist appearances
   const topTracks = [...tracks]
     .sort((a, b) => b.playlistCount - a.playlistCount)
-    .slice(0, 20)
+    .slice(0, 10)
     .map((t) => ({
       name: t.name,
       artists: t.artistNames.join(", "),
@@ -331,7 +331,7 @@ app.get("/api/dashboard", requireAuth, (req, res) => {
 
   const topArtists = Object.entries(artistPlaylistCount)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
+    .slice(0, 10)
     .map(([id, count]) => {
       const a = artistMap[id] || {};
       return {
@@ -572,7 +572,7 @@ app.get("/api/top-artists", requireAuth, async (req, res) => {
   const range = req.query.range || "medium_term";
   try {
     const data = await spotifyApi(
-      `/me/top/artists?limit=20&time_range=${range}`,
+      `/me/top/artists?limit=10&time_range=${range}`,
       req.session.accessToken
     );
     res.json(data);
@@ -585,7 +585,7 @@ app.get("/api/top-tracks", requireAuth, async (req, res) => {
   const range = req.query.range || "medium_term";
   try {
     const data = await spotifyApi(
-      `/me/top/tracks?limit=20&time_range=${range}`,
+      `/me/top/tracks?limit=10&time_range=${range}`,
       req.session.accessToken
     );
     res.json(data);
@@ -597,7 +597,7 @@ app.get("/api/top-tracks", requireAuth, async (req, res) => {
 app.get("/api/recently-played", requireAuth, async (req, res) => {
   try {
     const data = await spotifyApi(
-      "/me/player/recently-played?limit=20",
+      "/me/player/recently-played?limit=8",
       req.session.accessToken
     );
     res.json(data);

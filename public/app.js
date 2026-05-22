@@ -15,7 +15,7 @@
     return res.json();
   }
 
-  function skeleton(count = 5) {
+  function skeleton(count = 4) {
     return Array.from({ length: count }, () => '<li class="skeleton"></li>').join("");
   }
 
@@ -134,27 +134,16 @@
   }
 
   function renderLibraryStats(data) {
-    return `
-      <div class="library-stat">
-        <span class="library-stat-number">${data.totalUniqueTracksScanned.toLocaleString()}</span>
-        <span class="library-stat-label">Unique Tracks</span>
-      </div>
-      <div class="library-stat">
-        <span class="library-stat-number">${data.totalUniqueArtistsScanned.toLocaleString()}</span>
-        <span class="library-stat-label">Unique Artists</span>
-      </div>
-      <div class="library-stat">
-        <span class="library-stat-number">${data.totalPlaylists.toLocaleString()}</span>
-        <span class="library-stat-label">Your Playlists</span>
-      </div>
-      <div class="library-stat">
-        <span class="library-stat-number">${data.savedTracks.toLocaleString()}</span>
-        <span class="library-stat-label">Saved Tracks</span>
-      </div>
-      <div class="library-stat">
-        <span class="library-stat-number">${data.savedAlbums.toLocaleString()}</span>
-        <span class="library-stat-label">Saved Albums</span>
-      </div>`;
+    const stats = [
+      [data.totalUniqueTracksScanned, "Tracks"],
+      [data.totalUniqueArtistsScanned, "Artists"],
+      [data.totalPlaylists, "Playlists"],
+      [data.savedTracks, "Saved"],
+      [data.savedAlbums, "Albums"],
+    ];
+    return stats.map(([n, l]) =>
+      `<div class="library-stat"><span class="library-stat-number">${n.toLocaleString()}</span><span class="library-stat-label">${l}</span></div>`
+    ).join("");
   }
 
   // ---------- Loaders ----------
