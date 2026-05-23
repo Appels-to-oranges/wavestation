@@ -566,6 +566,88 @@ app.get("/api/trends", requireAuth, (req, res) => {
   });
 });
 
+// ---------- Genre Momentum endpoint ----------
+
+app.get("/api/genre-momentum", requireAuth, (req, res) => {
+  const userId = req.session.userId;
+  if (!userId || !userDataStore.has(userId)) {
+    return res.status(400).json({ error: "No scan data." });
+  }
+
+  const store = userDataStore.get(userId);
+  const { tracks: trackMap, artists: artistMap } = store;
+
+  const allTracks = Object.values(trackMap)
+    .filter((t) => t.firstAdded)
+    .map((t) => {
+      const genres = new Set();
+      t.artistIds.forEach((aid) => {
+        artistMap[aid]?.genres?.forEach((g) => genres.add(g));
+      });
+      return { genres: [...genres], addedAt: new Date(t.firstAdded) };
+    });
+
+  if (!allTracks.length) return res.json({ periods: {} });
+
+  const now = new Date();
+  const periods = {
+    "4 weeks": new Date(now - 28 * 86400000),
+    "6 months": new Date(now - 182 * 86400000),
+    "1 year": new Date(now - 365 * 86400000),
+  };
+
+  const earliest = allTracks.reduce((min, t) => t.addedAt < min ? t.addedAt : min, allTracks[0].addedAt);
+  const totalDays = Math.max(1, (now - earliest) / 86400000);
+
+  // Count total adds per genre over all time
+  const genreTotalCounts = {};
+  allTracks.forEach((t) => {
+    t.genres.forEach((g) => { genreTotalCounts[g] = (genreTotalCounts[g] || 0) + 1; });
+  });
+
+  // Only consider genres with at least 5 total tracks
+  const significantGenres = Object.entries(genreTotalCounts)
+    .filter(([, c]) => c >= 5)
+    .map(([g]) => g);
+
+  const result = {};
+
+  for (const [label, cutoff] of Object.entries(periods)) {
+    const windowDays = Math.max(1, (now - cutoff) / 86400000);
+    const windowTracks = allTracks.filter((t) => t.addedAt >= cutoff);
+
+    const windowGenreCounts = {};
+    windowTracks.forEach((t) => {
+      t.genres.forEach((g) => { windowGenreCounts[g] = (windowGenreCounts[g] || 0) + 1; });
+    });
+
+    const momentum = significantGenres.map((genre) => {
+      const totalCount = genreTotalCounts[genre];
+      const windowCount = windowGenreCounts[genre] || 0;
+
+      // Rate: tracks per day
+      const historicalRate = totalCount / totalDays;
+      const windowRate = windowCount / windowDays;
+
+      // % change from historical average
+      const change = historicalRate > 0
+        ? Math.round(((windowRate - historicalRate) / historicalRate) * 100)
+        : (windowCount > 0 ? 100 : 0);
+
+      return { genre, windowCount, totalCount, change };
+    });
+
+    // Sort: biggest gainers first, then biggest losers
+    const trending = [...momentum].filter((m) => m.change > 0).sort((a, b) => b.change - a.change);
+    const cooling = [...momentum].filter((m) => m.change < 0).sort((a, b) => a.change - b.change);
+    const steady = momentum.filter((m) => m.change === 0);
+
+    result[label] = { trending: trending.slice(0, 8), cooling: cooling.slice(0, 8), steady: steady.slice(0, 5) };
+  }
+
+  res.json({ periods: result });
+});
+
 // ---------- Spotify listening history (live from API, supports time range) ----------
 
 app.get("/api/top-artists", requireAuth, async (req, res) => {

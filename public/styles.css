@@ -453,6 +453,90 @@ body {
   flex-shrink: 0;
 }
 
+/* Momentum tabs (reuse tab-btn style) */
+.momentum-tab {
+  padding: 0.35rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 50px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.momentum-tab.active,
+.momentum-tab:hover {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Momentum list */
+.momentum-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.momentum-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  transition: background var(--transition);
+}
+
+.momentum-item:hover {
+  background: var(--surface-hover);
+}
+
+.momentum-arrow {
+  font-size: 0.85rem;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.momentum-up {
+  color: #4ade80;
+}
+
+.momentum-down {
+  color: #f87171;
+}
+
+.momentum-genre {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.momentum-detail {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.momentum-pct {
+  font-size: 0.78rem;
+  font-weight: 700;
+  width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.momentum-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.5rem;
+}
+
 /* Chart containers */
 .trends-grid {
   grid-template-columns: 1fr;

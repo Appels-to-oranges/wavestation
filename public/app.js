@@ -422,6 +422,45 @@
     });
   }
 
+  // ---------- Genre Momentum ----------
+
+  let momentumData = null;
+  let currentMomentumPeriod = "4 weeks";
+
+  function renderMomentumList(items, direction) {
+    if (!items || !items.length) {
+      return `<div class="momentum-empty">No ${direction === "up" ? "trending" : "cooling"} genres in this period</div>`;
+    }
+    return items.map((m) => {
+      const arrow = m.change > 0 ? "↑" : "↓";
+      const cls = m.change > 0 ? "momentum-up" : "momentum-down";
+      const pct = m.change > 0 ? `+${m.change}%` : `${m.change}%`;
+      return `<div class="momentum-item">
+        <span class="momentum-arrow ${cls}">${arrow}</span>
+        <span class="momentum-genre">${m.genre}</span>
+        <span class="momentum-detail">${m.windowCount} added</span>
+        <span class="momentum-pct ${cls}">${pct}</span>
+      </div>`;
+    }).join("");
+  }
+
+  function renderMomentum() {
+    if (!momentumData?.periods) return;
+    const period = momentumData.periods[currentMomentumPeriod];
+    if (!period) return;
+    document.getElementById("momentum-trending").innerHTML = renderMomentumList(period.trending, "up");
+    document.getElementById("momentum-cooling").innerHTML = renderMomentumList(period.cooling, "down");
+  }
+
+  async function loadMomentum() {
+    document.getElementById("momentum-trending").innerHTML = skeleton(3);
+    document.getElementById("momentum-cooling").innerHTML = skeleton(3);
+    const data = await api("/api/genre-momentum");
+    if (!data) return;
+    momentumData = data;
+    renderMomentum();
+  }
+
   // ---------- Event listeners ----------
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -430,6 +469,15 @@
       btn.classList.add("active");
       currentRange = btn.dataset.range;
       loadListeningHistory();
+    });
+  });
+
+  document.querySelectorAll(".momentum-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".momentum-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentMomentumPeriod = btn.dataset.period;
+      renderMomentum();
     });
   });
 
@@ -460,6 +508,7 @@
     loadProfile();
     loadListeningHistory();
     loadPlaylistAnalysis();
+    loadMomentum();
     loadTrends();
   }
 
