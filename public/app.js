@@ -435,10 +435,11 @@
       const arrow = m.change > 0 ? "↑" : "↓";
       const cls = m.change > 0 ? "momentum-up" : "momentum-down";
       const pct = m.change > 0 ? `+${m.change}%` : `${m.change}%`;
+      const expected = Math.round(m.expectedCount);
       return `<div class="momentum-item">
         <span class="momentum-arrow ${cls}">${arrow}</span>
         <span class="momentum-genre">${m.genre}</span>
-        <span class="momentum-detail">${m.windowCount} added</span>
+        <span class="momentum-detail">${m.windowCount} added · avg ${expected}</span>
         <span class="momentum-pct ${cls}">${pct}</span>
       </div>`;
     }).join("");
@@ -446,10 +447,22 @@
 
   function renderMomentum() {
     if (!momentumData?.periods) return;
-    const period = momentumData.periods[currentMomentumPeriod];
-    if (!period) return;
-    document.getElementById("momentum-trending").innerHTML = renderMomentumList(period.trending, "up");
-    document.getElementById("momentum-cooling").innerHTML = renderMomentumList(period.cooling, "down");
+    const all = momentumData.periods[currentMomentumPeriod];
+    if (!all) return;
+
+    const sortBy = document.getElementById("momentum-sort").value;
+    let sorted;
+    if (sortBy === "total") {
+      sorted = [...all].sort((a, b) => b.totalCount - a.totalCount);
+    } else {
+      sorted = [...all].sort((a, b) => b.change - a.change);
+    }
+
+    const trending = sorted.filter((m) => m.change > 0).slice(0, 10);
+    const cooling = sorted.filter((m) => m.change < 0).slice(0, 10);
+
+    document.getElementById("momentum-trending").innerHTML = renderMomentumList(trending, "up");
+    document.getElementById("momentum-cooling").innerHTML = renderMomentumList(cooling, "down");
   }
 
   async function loadMomentum() {
@@ -480,6 +493,8 @@
       renderMomentum();
     });
   });
+
+  $("#momentum-sort").addEventListener("change", renderMomentum);
 
   $("#genre-filter").addEventListener("change", loadPlaylistAnalysis);
   $("#decade-filter").addEventListener("change", loadPlaylistAnalysis);

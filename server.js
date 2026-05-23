@@ -625,24 +625,18 @@ app.get("/api/genre-momentum", requireAuth, (req, res) => {
       const totalCount = genreTotalCounts[genre];
       const windowCount = windowGenreCounts[genre] || 0;
 
-      // Rate: tracks per day
       const historicalRate = totalCount / totalDays;
       const windowRate = windowCount / windowDays;
+      const expectedCount = Math.round(historicalRate * windowDays * 10) / 10;
 
-      // % change from historical average
       const change = historicalRate > 0
         ? Math.round(((windowRate - historicalRate) / historicalRate) * 100)
         : (windowCount > 0 ? 100 : 0);
 
-      return { genre, windowCount, totalCount, change };
+      return { genre, windowCount, expectedCount, totalCount, change };
     });
 
-    // Sort: biggest gainers first, then biggest losers
-    const trending = [...momentum].filter((m) => m.change > 0).sort((a, b) => b.change - a.change);
-    const cooling = [...momentum].filter((m) => m.change < 0).sort((a, b) => a.change - b.change);
-    const steady = momentum.filter((m) => m.change === 0);
-
-    result[label] = { trending: trending.slice(0, 8), cooling: cooling.slice(0, 8), steady: steady.slice(0, 5) };
+    result[label] = momentum;
   }
 
   res.json({ periods: result });

@@ -521,6 +521,7 @@ body {
   font-size: 0.7rem;
   color: var(--text-muted);
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .momentum-pct {
