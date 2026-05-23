@@ -405,8 +405,8 @@ app.get("/api/trends", requireAuth, (req, res) => {
   const store = userDataStore.get(userId);
   const { tracks: trackMap, artists: artistMap } = store;
   const artistFilter = req.query.artist || "";
-  const genreFilter = req.query.genre || "";
-  const decadeFilter = req.query.decade || "";
+  const genreFilter = req.query.genres || "";
+  const decadeFilter = req.query.decades || "";
 
   const allTracks = Object.values(trackMap);
 
@@ -449,28 +449,27 @@ app.get("/api/trends", requireAuth, (req, res) => {
     return { months: months.slice(first, last + 1), data: dataArr.slice(first, last + 1) };
   }
 
-  // Apply genre/decade filters
-  let filtered = enriched;
-  if (decadeFilter) filtered = filtered.filter((t) => t.decade === decadeFilter);
-  if (genreFilter) filtered = filtered.filter((t) => t.genres.includes(genreFilter));
+  const selectedGenres = genreFilter ? genreFilter.split(",") : [];
+  const selectedDecades = decadeFilter ? decadeFilter.split(",") : [];
 
-  // Build month list from filtered data only
-  const filteredMonthSet = new Set();
-  filtered.forEach((t) => filteredMonthSet.add(t.month));
-  const filteredMonths = [...filteredMonthSet].sort();
+  // All months from enriched data
+  const allMonthSet = new Set();
+  enriched.forEach((t) => allMonthSet.add(t.month));
+  const allMonths = [...allMonthSet].sort();
 
-  // Genre over time (uses filtered tracks + filtered months)
+  // Genre totals for ranking
   const genreTotals = {};
-  filtered.forEach((t) => {
+  enriched.forEach((t) => {
     t.genres.forEach((g) => { genreTotals[g] = (genreTotals[g] || 0) + 1; });
   });
-  const topGenreNames = genreFilter
-    ? [genreFilter]
-    : Object.entries(genreTotals).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([g]) => g);
+  const topGenreNames = selectedGenres.length
+    ? selectedGenres
+    : Object.entries(genreTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g);
 
+  // Genre over time — only count tracks that have any of the selected genres
   const genreOverTime = {};
   topGenreNames.forEach((g) => { genreOverTime[g] = {}; });
-  filtered.forEach((t) => {
+  enriched.forEach((t) => {
     t.genres.forEach((g) => {
       if (genreOverTime[g]) {
         genreOverTime[g][t.month] = (genreOverTime[g][t.month] || 0) + 1;
@@ -480,28 +479,31 @@ app.get("/api/trends", requireAuth, (req, res) => {
 
   const rawGenreSeries = topGenreNames.map((genre) => ({
     label: genre,
-    data: filteredMonths.map((m) => genreOverTime[genre][m] || 0),
+    data: allMonths.map((m) => genreOverTime[genre][m] || 0),
   }));
-  const genreTrimmed = trimSeries(filteredMonths, rawGenreSeries);
+  const genreTrimmed = trimSeries(allMonths, rawGenreSeries);
 
-  // Decade over time (also uses filtered tracks)
-  const decadeSet = new Set();
-  filtered.forEach((t) => { if (t.decade) decadeSet.add(t.decade); });
-  const decadeNames = [...decadeSet].sort();
+  // Decade totals for ranking
+  const decadeTotals = {};
+  enriched.forEach((t) => { if (t.decade) decadeTotals[t.decade] = (decadeTotals[t.decade] || 0) + 1; });
+  const topDecadeNames = selectedDecades.length
+    ? selectedDecades
+    : Object.entries(decadeTotals).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => d);
 
+  // Decade over time
   const decadeOverTime = {};
-  decadeNames.forEach((d) => { decadeOverTime[d] = {}; });
-  filtered.forEach((t) => {
+  topDecadeNames.forEach((d) => { decadeOverTime[d] = {}; });
+  enriched.forEach((t) => {
     if (t.decade && decadeOverTime[t.decade]) {
       decadeOverTime[t.decade][t.month] = (decadeOverTime[t.decade][t.month] || 0) + 1;
     }
   });
 
-  const rawDecadeSeries = decadeNames.map((decade) => ({
+  const rawDecadeSeries = topDecadeNames.map((decade) => ({
     label: decade,
-    data: filteredMonths.map((m) => decadeOverTime[decade][m] || 0),
+    data: allMonths.map((m) => decadeOverTime[decade][m] || 0),
   }));
-  const decadeTrimmed = trimSeries(filteredMonths, rawDecadeSeries);
+  const decadeTrimmed = trimSeries(allMonths, rawDecadeSeries);
 
   // Artist timeline (if requested) — uses full enriched data, not filtered
   let artistTimeline = null;

@@ -275,16 +275,87 @@
     }));
   }
 
+  let selectedGenres = [];
+  let selectedDecades = [];
+  let allGenreOptions = [];
+  let allDecadeOptions = [];
+
+  function initChipPicker(wrapperId, chipBarId, options, selected, onUpdate) {
+    const wrapper = document.getElementById(wrapperId);
+    const input = wrapper.querySelector(".searchable-input");
+    const dropdown = wrapper.querySelector(".searchable-dropdown");
+
+    function renderDropdown(filter) {
+      const q = (filter || "").toLowerCase();
+      const filtered = q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+      dropdown.innerHTML = filtered.map((o) => {
+        const active = selected.includes(o.name);
+        return `<div class="searchable-option${active ? " active" : ""}" data-value="${o.name}">${active ? "✓ " : ""}${o.name}<span class="genre-count-badge">${o.count}</span></div>`;
+      }).join("") || '<div class="searchable-option" style="pointer-events:none;color:#555">No matches</div>';
+    }
+
+    function renderChips() {
+      document.getElementById(chipBarId).innerHTML = selected.map((name) =>
+        `<span class="chip">${name}<span class="chip-remove" data-value="${name}">×</span></span>`
+      ).join("");
+    }
+
+    input.addEventListener("focus", () => { renderDropdown(input.value); dropdown.classList.add("open"); });
+    input.addEventListener("input", () => { renderDropdown(input.value); dropdown.classList.add("open"); });
+
+    dropdown.addEventListener("click", (e) => {
+      const opt = e.target.closest(".searchable-option");
+      if (!opt || !opt.dataset.value) return;
+      const val = opt.dataset.value;
+      const idx = selected.indexOf(val);
+      if (idx >= 0) selected.splice(idx, 1);
+      else selected.push(val);
+      input.value = "";
+      renderDropdown("");
+      renderChips();
+      onUpdate();
+    });
+
+    document.getElementById(chipBarId).addEventListener("click", (e) => {
+      const rm = e.target.closest(".chip-remove");
+      if (!rm) return;
+      const idx = selected.indexOf(rm.dataset.value);
+      if (idx >= 0) selected.splice(idx, 1);
+      renderChips();
+      onUpdate();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!wrapper.contains(e.target)) dropdown.classList.remove("open");
+    });
+
+    renderChips();
+  }
+
   async function loadTrends() {
     const data = await api("/api/trends");
     if (!data) return;
     cachedTrendsData = data;
 
+    allGenreOptions = data.filterOptions.genres;
+    allDecadeOptions = data.filterOptions.decades.map((d) => ({ name: d, count: "" }));
+
+    selectedGenres = (data.genreSeries || []).map((s) => s.label);
+    selectedDecades = (data.decadeSeries || []).map((s) => s.label);
+
     renderGenreChart(data);
     renderDecadeChart(data);
-    populateTrendFilters(data.filterOptions);
+
+    initChipPicker("genre-chart-picker", "genre-chips", allGenreOptions, selectedGenres, reloadGenreChart);
+    initChipPicker("decade-chart-picker", "decade-chips", allDecadeOptions, selectedDecades, reloadDecadeChart);
+
     populateArtistPicker(data.artistList);
-    initSearchableGenre();
+
+    if (data.artistList?.length) {
+      const topArtist = data.artistList[0];
+      $("#artist-picker-select").value = topArtist.id;
+      loadArtistTimeline(topArtist.id);
+    }
   }
 
   function renderGenreChart(data) {
@@ -307,61 +378,6 @@
     });
   }
 
-  let trendGenreOptions = [];
-
-  function initSearchableGenre() {
-    const wrapper = document.getElementById("trend-genre-picker");
-    const input = wrapper.querySelector(".searchable-input");
-    const dropdown = wrapper.querySelector(".searchable-dropdown");
-    const hidden = $("#trend-genre-filter");
-
-    function render(filter) {
-      const q = (filter || "").toLowerCase();
-      const filtered = q
-        ? trendGenreOptions.filter((g) => g.name.toLowerCase().includes(q))
-        : trendGenreOptions;
-
-      const allItem = `<div class="searchable-option${!hidden.value ? " active" : ""}" data-value="">All genres</div>`;
-      dropdown.innerHTML = allItem + filtered.map((g) =>
-        `<div class="searchable-option${hidden.value === g.name ? " active" : ""}" data-value="${g.name}">${g.name}<span class="genre-count-badge">${g.count}</span></div>`
-      ).join("");
-    }
-
-    input.addEventListener("focus", () => {
-      render(input.value);
-      dropdown.classList.add("open");
-    });
-
-    input.addEventListener("input", () => {
-      render(input.value);
-      dropdown.classList.add("open");
-    });
-
-    dropdown.addEventListener("click", (e) => {
-      const opt = e.target.closest(".searchable-option");
-      if (!opt) return;
-      const val = opt.dataset.value;
-      hidden.value = val;
-      input.value = val || "";
-      input.placeholder = val ? "Search genres…" : "Search genres…";
-      dropdown.classList.remove("open");
-      reloadTrendCharts();
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!wrapper.contains(e.target)) dropdown.classList.remove("open");
-    });
-  }
-
-  function populateTrendFilters(options) {
-    trendGenreOptions = options.genres;
-    const df = $("#trend-decade-filter");
-    const currentD = df.value;
-
-    df.innerHTML = '<option value="">All decades</option>' +
-      options.decades.map((d) => `<option value="${d}"${d === currentD ? " selected" : ""}>${d}</option>`).join("");
-  }
-
   function populateArtistPicker(artistList) {
     const picker = $("#artist-picker-select");
     const current = picker.value;
@@ -371,16 +387,19 @@
       ).join("");
   }
 
-  async function reloadTrendCharts() {
-    const genre = $("#trend-genre-filter").value;
-    const decade = $("#trend-decade-filter").value;
+  async function reloadGenreChart() {
     const params = new URLSearchParams();
-    if (genre) params.set("genre", genre);
-    if (decade) params.set("decade", decade);
-
+    if (selectedGenres.length) params.set("genres", selectedGenres.join(","));
     const data = await api(`/api/trends?${params}`);
     if (!data) return;
     renderGenreChart(data);
+  }
+
+  async function reloadDecadeChart() {
+    const params = new URLSearchParams();
+    if (selectedDecades.length) params.set("decades", selectedDecades.join(","));
+    const data = await api(`/api/trends?${params}`);
+    if (!data) return;
     renderDecadeChart(data);
   }
 
@@ -515,8 +534,6 @@
     $("#filter-clear").style.display = "none";
     loadPlaylistAnalysis();
   });
-
-  $("#trend-decade-filter").addEventListener("change", reloadTrendCharts);
 
   $("#artist-picker-select").addEventListener("change", (e) => {
     loadArtistTimeline(e.target.value);

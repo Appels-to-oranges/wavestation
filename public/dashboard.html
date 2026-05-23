@@ -119,21 +119,18 @@
     <!-- ===== Trends Section ===== -->
     <div class="section-header" style="margin-top:1.5rem">
       <h2 class="section-title">Trends Over Time</h2>
-      <div class="chart-filters">
-        <div class="searchable-select" id="trend-genre-picker">
-          <input type="text" class="searchable-input" placeholder="Search genres…" autocomplete="off" />
-          <div class="searchable-dropdown"></div>
-          <input type="hidden" id="trend-genre-filter" value="" />
-        </div>
-        <select class="filter-select" id="trend-decade-filter">
-          <option value="">All decades</option>
-        </select>
-      </div>
     </div>
 
     <div class="sections-grid trends-grid">
       <div class="card">
         <h2>Genre Trends</h2>
+        <div class="chart-filters">
+          <div class="searchable-select" id="genre-chart-picker">
+            <input type="text" class="searchable-input" placeholder="Add/remove genres…" autocomplete="off" />
+            <div class="searchable-dropdown"></div>
+          </div>
+        </div>
+        <div class="chip-bar" id="genre-chips"></div>
         <div class="chart-container">
           <canvas id="genre-trends-chart"></canvas>
         </div>
@@ -141,6 +138,13 @@
 
       <div class="card">
         <h2>Decade Trends</h2>
+        <div class="chart-filters">
+          <div class="searchable-select" id="decade-chart-picker">
+            <input type="text" class="searchable-input" placeholder="Add/remove decades…" autocomplete="off" />
+            <div class="searchable-dropdown"></div>
+          </div>
+        </div>
+        <div class="chip-bar" id="decade-chips"></div>
         <div class="chart-container">
           <canvas id="decade-trends-chart"></canvas>
         </div>
@@ -156,7 +160,7 @@
         <div class="chart-container">
           <canvas id="artist-timeline-chart"></canvas>
         </div>
-        <p class="card-subtitle" id="artist-timeline-empty" style="text-align:center;margin-top:0.75rem">Select an artist above to see their timeline</p>
+        <p class="card-subtitle" id="artist-timeline-empty" style="text-align:center;margin-top:0.75rem;display:none"></p>
       </div>
     </div>
   </div>
