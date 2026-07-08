@@ -7,6 +7,9 @@ const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = process.env.NODE_ENV === "production";
+
+if (IS_PROD) app.set("trust proxy", 1);
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
@@ -27,7 +30,11 @@ app.use(
     secret: process.env.SESSION_SECRET || "fallback-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 3600000 },
+    cookie: {
+      maxAge: 3600000,
+      secure: IS_PROD,
+      sameSite: IS_PROD ? "lax" : "lax",
+    },
   })
 );
 
@@ -64,7 +71,9 @@ app.get("/login", (req, res) => {
     state,
   });
 
-  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
+  req.session.save(() => {
+    res.redirect(`https://accounts.spotify.com/authorize?${params}`);
+  });
 });
 
 app.get("/callback", async (req, res) => {
@@ -705,6 +714,7 @@ app.get("/api/me", requireAuth, async (req, res) => {
   }
 });
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`Server running at http://127.0.0.1:${PORT}`);
+const HOST = IS_PROD ? "0.0.0.0" : "127.0.0.1";
+app.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}`);
 });

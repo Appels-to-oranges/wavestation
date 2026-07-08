@@ -79,6 +79,12 @@ body {
   transform: scale(1.03);
 }
 
+.landing-footnote {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: #555;
+}
+
 .scan-progress-wrapper {
   margin-top: 0.5rem;
 }
