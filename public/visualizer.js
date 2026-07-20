@@ -4,25 +4,18 @@
   if (typeof THREE === "undefined") return;
 
   /* ===== Config ===== */
-  const LINE_COUNT = 128;
-  const BOKEH_COUNT = 22;
+  const BANDS = 16;
+  const HIST_W = 512;
+  const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
-  const TEX_W = 256;
   const FREQ_LO = 30;
   const FREQ_HI = 18000;
   const NM_RED = 780;
   const NM_VIOLET = 380;
-  const SMOOTH = 0.18;
-  const AMBIENT_SMOOTH = 0.05;
-  const DECAY = 0.06;
+  const SMOOTH = 0.3;
+  const AMBIENT_SMOOTH = 0.04;
 
-  /* ===== Hz → nm → RGB =====
-   *
-   *   λ(nm) = 780 − 400 · log(f / 30) / log(600)
-   *
-   *   30 Hz  → 780 nm  (red)        →  bottom of canvas
-   *   18 kHz → 380 nm  (violet)     →  top of canvas
-   */
+  /* ===== Hz → nm → RGB ===== */
 
   function hzToNm(hz) {
     const t = Math.log(hz / FREQ_LO) / Math.log(FREQ_HI / FREQ_LO);
@@ -50,20 +43,19 @@
   function hzToRGB(hz) { return nmToRGB(hzToNm(hz)); }
   function rand(a, b) { return a + Math.random() * (b - a); }
 
-  /* ===== Static color-map texture (256×1) ===== */
+  /* ===== Color-map texture (256×1) ===== */
 
   function buildColorMap() {
-    const data = new Uint8Array(TEX_W * 4);
-    for (let i = 0; i < TEX_W; i++) {
-      const t = i / (TEX_W - 1);
-      const hz = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, t);
-      const [r, g, b] = hzToRGB(hz);
-      data[i * 4]     = Math.round(r * 255);
-      data[i * 4 + 1] = Math.round(g * 255);
-      data[i * 4 + 2] = Math.round(b * 255);
-      data[i * 4 + 3] = 255;
+    const d = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      const [r, g, b] = hzToRGB(FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, t));
+      d[i * 4] = Math.round(r * 255);
+      d[i * 4 + 1] = Math.round(g * 255);
+      d[i * 4 + 2] = Math.round(b * 255);
+      d[i * 4 + 3] = 255;
     }
-    const tex = new THREE.DataTexture(data, TEX_W, 1, THREE.RGBAFormat);
+    const tex = new THREE.DataTexture(d, 256, 1, THREE.RGBAFormat);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
@@ -72,70 +64,60 @@
 
   /* ===== Shaders ===== */
 
-  const lineVert = `
+  const quadVert = `
     varying vec2 vUv;
     void main() {
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }`;
 
-  /*  128 horizontal lines stacked bottom (bass/red) → top (treble/violet).
-   *  Each line spans the full width and bends vertically with amplitude.
-   *  Per-pixel: find the nearest lines, compute distance with bend offset,
-   *  apply gaussian glow and spectral colour.                              */
-  const lineFrag = [
-    "#define LC 128",
-    "#define PI 3.14159265",
+  const specFrag = [
+    "#define BANDS 16",
     "precision highp float;",
-    "uniform sampler2D uFreq;",
+    "uniform sampler2D uHistory;",
     "uniform sampler2D uColors;",
-    "uniform float uTime;",
-    "uniform float uAspect;",
+    "uniform float uWritePos;",
     "varying vec2 vUv;",
     "",
     "void main() {",
-    "  vec2 p = vec2((vUv.x - 0.5) * 2.0 * uAspect, (vUv.y - 0.5) * 2.0);",
-    "  float sp = 2.0 / float(LC);",
-    "  int ctr = int(floor((p.y + 1.0) / sp));",
-    "  vec3 col = vec3(0.0);",
+    "  float y = (vUv.y - 0.5) * 2.0;",
+    "  float slotH = 2.0 / float(BANDS);",
+    "  float bandH = slotH * 0.65;",
+    "  int slot = int(floor((y + 1.0) / slotH));",
     "",
-    "  for (int di = -4; di <= 4; di++) {",
-    "    int idx = ctr + di;",
-    "    if (idx < 0 || idx >= LC) continue;",
-    "    float ft = (float(idx) + 0.5) / float(LC);",
-    "    float amp = texture2D(uFreq, vec2(ft, 0.5)).r;",
-    "    vec3  c   = texture2D(uColors, vec2(ft, 0.5)).rgb;",
+    "  vec3 acc = vec3(0.0);",
     "",
-    "    float baseY = -1.0 + sp * (float(idx) + 0.5);",
+    "  for (int di = -1; di <= 1; di++) {",
+    "    int idx = slot + di;",
+    "    if (idx < 0 || idx >= BANDS) continue;",
     "",
-    "    float nx = p.x / uAspect;",
-    "    float ph = ft * 7.0;",
-    "    float t  = uTime;",
-    "    float bend = 0.0;",
-    "    bend += sin(nx * PI * 1.5 + t * 0.55 + ph)        * 0.014;",
-    "    bend += sin(nx * PI * 3.8 + t * 1.05 + ph * 1.7)  * 0.007;",
-    "    bend += sin(nx * PI * 0.6 + t * 0.25 + ph * 0.4)  * 0.010;",
-    "    bend *= amp * (1.0 + amp * 2.5);",
+    "    float ft = (float(idx) + 0.5) / float(BANDS);",
+    "    vec3 col = texture2D(uColors, vec2(ft, 0.5)).rgb;",
     "",
-    "    float lineY = baseY + bend;",
-    "    float d = abs(p.y - lineY);",
+    "    float bandBase = -1.0 + float(idx) * slotH;",
     "",
-    "    float bw = sp * (0.12 + 0.08 * (1.0 - ft));",
-    "    float w  = bw * (1.0 + amp * 3.5);",
-    "    float glow = exp(-d * d / (w * w));",
-    "    float br = amp * (1.8 + amp * 1.2);",
-    "    col += c * glow * br;",
+    "    float histX = mod(vUv.x + uWritePos, 1.0);",
+    "    float bandT = (float(idx) + 0.5) / float(BANDS);",
+    "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
+    "",
+    "    float ridgeY = bandBase + bandH * 0.08 + amp * bandH * 0.88;",
+    "    float dist = y - ridgeY;",
+    "",
+    "    float glow = exp(-dist * dist / 0.00012);",
+    "",
+    "    float fill = 0.0;",
+    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.09) {",
+    "      fill = smoothstep(bandBase, ridgeY, y) * 0.22;",
+    "    }",
+    "",
+    "    acc += col * (glow * 1.5 + fill);",
     "  }",
-    "  gl_FragColor = vec4(col, 1.0);",
+    "",
+    "  gl_FragColor = vec4(vec3(0.039) + acc, 1.0);",
     "}",
   ].join("\n");
 
-  const bokehVert = `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }`;
+  const bokehVert = quadVert;
 
   const bokehFrag = `
     uniform float uAlpha;
@@ -154,24 +136,20 @@
     constructor(canvas) {
       this.canvas = canvas;
 
-      /* renderer */
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
       this.renderer.setClearColor(0x0a0a0a, 1);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.renderer.autoClear = false;
 
-      /* cameras */
       this.aspect = 1;
       this.bokehCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
       this.bokehCam.position.z = 5;
       this.lineCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
       this.lineCam.position.z = 0.5;
 
-      /* scenes */
       this.bokehScene = new THREE.Scene();
       this.lineScene = new THREE.Scene();
 
-      /* audio */
       this.audioCtx = null;
       this.analyser = null;
       this.rawData = null;
@@ -181,30 +159,33 @@
       this.connected = false;
       this.isPlaying = false;
 
-      /* display */
-      this.displayAmp = new Float32Array(TEX_W);
-      this.texBinMap = [];
+      this.bandSmoothed = new Float32Array(BANDS);
+      this.bandBinMap = [];
       this.time = 0;
       this.lastTime = performance.now() / 1000;
       this.bokeh = [];
 
-      /* textures */
-      this.freqPixels = new Uint8Array(TEX_W * 4);
-      this.freqTex = new THREE.DataTexture(this.freqPixels, TEX_W, 1, THREE.RGBAFormat);
-      this.freqTex.magFilter = THREE.LinearFilter;
-      this.freqTex.minFilter = THREE.LinearFilter;
+      /* history texture: HIST_W columns × BANDS rows */
+      this.histPixels = new Uint8Array(HIST_W * BANDS * 4);
+      this.histTex = new THREE.DataTexture(
+        this.histPixels, HIST_W, BANDS, THREE.RGBAFormat
+      );
+      this.histTex.magFilter = THREE.LinearFilter;
+      this.histTex.minFilter = THREE.LinearFilter;
+      this.histTex.wrapS = THREE.RepeatWrapping;
+      this.histTex.wrapT = THREE.ClampToEdgeWrapping;
+      this.histTex.needsUpdate = true;
+      this.writeCol = 0;
+
       this.colorMap = buildColorMap();
 
-      /* build */
       this._resize();
       window.addEventListener("resize", () => this._resize());
-      this._buildBinMap(this.sampleRate);
+      this._buildBandMap(this.sampleRate);
       this._buildBokeh();
-      this._buildLineQuad();
+      this._buildQuad();
       this._loop();
     }
-
-    /* ---- layout ---- */
 
     _resize() {
       const p = this.canvas.parentElement;
@@ -215,20 +196,18 @@
       this.bokehCam.left = -this.aspect;
       this.bokehCam.right = this.aspect;
       this.bokehCam.updateProjectionMatrix();
-      if (this.lineQuad)
-        this.lineQuad.material.uniforms.uAspect.value = this.aspect;
     }
 
-    _buildBinMap(sr) {
+    _buildBandMap(sr) {
       this.sampleRate = sr;
       const hzPerBin = sr / FFT_SIZE;
-      this.texBinMap = [];
-      for (let i = 0; i < TEX_W; i++) {
-        const f0 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, i / TEX_W);
-        const f1 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, (i + 1) / TEX_W);
+      this.bandBinMap = [];
+      for (let i = 0; i < BANDS; i++) {
+        const f0 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, i / BANDS);
+        const f1 = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, (i + 1) / BANDS);
         const b0 = Math.max(0, Math.floor(f0 / hzPerBin));
         const b1 = Math.min(this.binCount, Math.max(Math.ceil(f1 / hzPerBin), b0 + 1));
-        this.texBinMap.push([b0, b1]);
+        this.bandBinMap.push([b0, b1]);
       }
     }
 
@@ -238,11 +217,11 @@
       if (this.connected) return;
       try {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        this._buildBinMap(this.audioCtx.sampleRate);
+        this._buildBandMap(this.audioCtx.sampleRate);
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = FFT_SIZE;
-        this.analyser.smoothingTimeConstant = 0.75;
+        this.analyser.smoothingTimeConstant = 0.5;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -273,35 +252,42 @@
         }
       }
       const t = this.time;
-      const boost = this.isPlaying ? 1.4 : 0.6;
+      const boost = this.isPlaying ? 1.4 : 0.5;
       for (let i = 0; i < this.binCount; i++) {
         const f = i / this.binCount;
         const fall = Math.pow(1 - f, 1.6);
         const v =
-          (0.18 +
-            Math.sin(t * 0.45 + f * 5.5) * 0.12 +
-            Math.sin(t * 0.75 + f * 11 + 1.2) * 0.09 +
-            Math.cos(t * 1.1) * 0.07 * (1 - f)) *
+          (0.15 +
+            Math.sin(t * 0.4 + f * 5) * 0.1 +
+            Math.sin(t * 0.7 + f * 10 + 1.2) * 0.08 +
+            Math.cos(t * 1.0) * 0.06 * (1 - f)) *
           fall * boost;
-        this.smoothed[i] += (Math.max(0, Math.min(1, v)) - this.smoothed[i]) * AMBIENT_SMOOTH;
+        this.smoothed[i] +=
+          (Math.max(0, Math.min(1, v)) - this.smoothed[i]) * AMBIENT_SMOOTH;
       }
     }
 
-    _updateFreqTex() {
-      for (let i = 0; i < TEX_W; i++) {
-        const [lo, hi] = this.texBinMap[i];
+    _updateHistory() {
+      for (let b = 0; b < BANDS; b++) {
+        const [lo, hi] = this.bandBinMap[b];
         let s = 0;
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
-        const amp = s / (hi - lo);
-        if (amp > this.displayAmp[i]) this.displayAmp[i] = amp;
-        else this.displayAmp[i] += (amp - this.displayAmp[i]) * DECAY;
-        const v = Math.min(255, Math.round(this.displayAmp[i] * 255));
-        this.freqPixels[i * 4]     = v;
-        this.freqPixels[i * 4 + 1] = v;
-        this.freqPixels[i * 4 + 2] = v;
-        this.freqPixels[i * 4 + 3] = 255;
+        const raw = s / (hi - lo);
+
+        if (raw > this.bandSmoothed[b])
+          this.bandSmoothed[b] += (raw - this.bandSmoothed[b]) * 0.55;
+        else
+          this.bandSmoothed[b] += (raw - this.bandSmoothed[b]) * 0.12;
+
+        const v = Math.min(255, Math.round(this.bandSmoothed[b] * 255));
+        const idx = (b * HIST_W + this.writeCol) * 4;
+        this.histPixels[idx] = v;
+        this.histPixels[idx + 1] = v;
+        this.histPixels[idx + 2] = v;
+        this.histPixels[idx + 3] = 255;
       }
-      this.freqTex.needsUpdate = true;
+      this.writeCol = (this.writeCol + 1) % HIST_W;
+      this.histTex.needsUpdate = true;
     }
 
     /* ---- build ---- */
@@ -311,11 +297,11 @@
       for (let i = 0; i < BOKEH_COUNT; i++) {
         const bHz = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, Math.random());
         const [cr, cg, cb] = hzToRGB(bHz);
-        const baseAlpha = rand(0.01, 0.09);
+        const baseAlpha = rand(0.008, 0.06);
         const mat = new THREE.ShaderMaterial({
           uniforms: {
             uAlpha: { value: baseAlpha },
-            uColor: { value: new THREE.Vector3(cr * 0.5, cg * 0.5, cb * 0.5) },
+            uColor: { value: new THREE.Vector3(cr * 0.4, cg * 0.4, cb * 0.4) },
           },
           vertexShader: bokehVert,
           fragmentShader: bokehFrag,
@@ -323,16 +309,16 @@
           depthWrite: false,
         });
         const mesh = new THREE.Mesh(geo, mat);
-        const sz = rand(0.15, 1.4);
+        const sz = rand(0.15, 1.3);
         mesh.scale.set(sz, sz, 1);
         const d = {
           mesh, baseAlpha, sz,
           baseX: rand(-2.2, 2.2),
           baseY: rand(-1.1, 1.1),
           phase: rand(0, Math.PI * 2),
-          sX: rand(0.06, 0.3) * (Math.random() < 0.5 ? -1 : 1),
-          sY: rand(0.05, 0.2) * (Math.random() < 0.5 ? -1 : 1),
-          drift: rand(0.04, 0.18),
+          sX: rand(0.05, 0.25) * (Math.random() < 0.5 ? -1 : 1),
+          sY: rand(0.04, 0.18) * (Math.random() < 0.5 ? -1 : 1),
+          drift: rand(0.03, 0.15),
         };
         mesh.position.set(d.baseX, d.baseY, 0);
         this.bokehScene.add(mesh);
@@ -340,16 +326,15 @@
       }
     }
 
-    _buildLineQuad() {
+    _buildQuad() {
       const mat = new THREE.ShaderMaterial({
         uniforms: {
-          uFreq: { value: this.freqTex },
+          uHistory: { value: this.histTex },
           uColors: { value: this.colorMap },
-          uTime: { value: 0 },
-          uAspect: { value: this.aspect },
+          uWritePos: { value: 0 },
         },
-        vertexShader: lineVert,
-        fragmentShader: lineFrag,
+        vertexShader: quadVert,
+        fragmentShader: specFrag,
         transparent: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
@@ -362,14 +347,16 @@
 
     _updBokeh() {
       let en = 0;
-      for (let i = 0; i < TEX_W; i++) en += this.displayAmp[i];
-      en /= TEX_W;
+      for (let b = 0; b < BANDS; b++) en += this.bandSmoothed[b];
+      en /= BANDS;
       this.bokeh.forEach((b) => {
-        b.mesh.position.x = b.baseX + Math.sin(this.time * b.sX + b.phase) * b.drift;
-        b.mesh.position.y = b.baseY + Math.cos(this.time * b.sY + b.phase * 1.3) * b.drift;
-        const s = b.sz * (1 + en * 0.3);
+        b.mesh.position.x =
+          b.baseX + Math.sin(this.time * b.sX + b.phase) * b.drift;
+        b.mesh.position.y =
+          b.baseY + Math.cos(this.time * b.sY + b.phase * 1.3) * b.drift;
+        const s = b.sz * (1 + en * 0.25);
         b.mesh.scale.set(s, s, 1);
-        b.mesh.material.uniforms.uAlpha.value = b.baseAlpha + en * 0.03;
+        b.mesh.material.uniforms.uAlpha.value = b.baseAlpha + en * 0.02;
       });
     }
 
@@ -383,10 +370,10 @@
       this.time += dt;
 
       this._freq();
-      this._updateFreqTex();
+      this._updateHistory();
       this._updBokeh();
 
-      this.lineQuad.material.uniforms.uTime.value = this.time;
+      this.lineQuad.material.uniforms.uWritePos.value = this.writeCol / HIST_W;
 
       this.renderer.clear();
       this.renderer.render(this.bokehScene, this.bokehCam);
@@ -402,13 +389,18 @@
 
   function hookAudio() {
     const audio = window.__wsAudio;
-    if (!audio) { requestAnimationFrame(hookAudio); return; }
+    if (!audio) {
+      requestAnimationFrame(hookAudio);
+      return;
+    }
     audio.addEventListener("play", () => {
       viz.connectAudio(audio);
       viz.resumeCtx();
       viz.isPlaying = true;
     });
-    audio.addEventListener("pause", () => { viz.isPlaying = false; });
+    audio.addEventListener("pause", () => {
+      viz.isPlaying = false;
+    });
     if (!audio.paused) {
       viz.connectAudio(audio);
       viz.resumeCtx();
