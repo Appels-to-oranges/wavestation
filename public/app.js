@@ -116,7 +116,7 @@
   function playStation(station) {
     if (!station?.url) return;
     currentStation = station;
-    audio.src = station.url;
+    audio.src = "/api/stream?url=" + encodeURIComponent(station.url);
     audio.play().catch((e) => console.warn("Playback failed:", e));
 
     npName.textContent = station.name || "Unknown Station";
