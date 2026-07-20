@@ -12,7 +12,7 @@
   const FREQ_HI = 18000;
   const NM_RED = 780;
   const NM_VIOLET = 380;
-  const SMOOTH = 0.3;
+  const SMOOTH = 0.35;
   const AMBIENT_SMOOTH = 0.04;
 
   /* ===== Hz → nm → RGB ===== */
@@ -82,7 +82,7 @@
     "void main() {",
     "  float y = (vUv.y - 0.5) * 2.0;",
     "  float slotH = 2.0 / float(BANDS);",
-    "  float bandH = slotH * 0.65;",
+    "  float bandH = slotH * 0.72;",
     "  int slot = int(floor((y + 1.0) / slotH));",
     "",
     "  vec3 acc = vec3(0.0);",
@@ -100,17 +100,17 @@
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
     "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
     "",
-    "    float ridgeY = bandBase + bandH * 0.08 + amp * bandH * 0.88;",
+    "    float ridgeY = bandBase + bandH * 0.06 + amp * bandH * 0.9;",
     "    float dist = y - ridgeY;",
     "",
-    "    float glow = exp(-dist * dist / 0.00012);",
+    "    float glow = exp(-dist * dist / 0.00035);",
     "",
     "    float fill = 0.0;",
-    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.09) {",
-    "      fill = smoothstep(bandBase, ridgeY, y) * 0.22;",
+    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.07) {",
+    "      fill = smoothstep(bandBase, ridgeY, y) * 0.3;",
     "    }",
     "",
-    "    acc += col * (glow * 1.5 + fill);",
+    "    acc += col * (glow * 1.8 + fill);",
     "  }",
     "",
     "  gl_FragColor = vec4(vec3(0.039) + acc, 1.0);",
@@ -159,13 +159,19 @@
       this.connected = false;
       this.isPlaying = false;
 
-      this.bandSmoothed = new Float32Array(BANDS);
+      /*  Per-band adaptive tracking:
+       *  bandAvg  — slow-moving average (the "flat" baseline)
+       *  bandPeak — slow-decaying ceiling
+       *  bandDisplay — fast-attack / slow-decay output for history  */
+      this.bandAvg = new Float32Array(BANDS).fill(0.15);
+      this.bandPeak = new Float32Array(BANDS).fill(0.3);
+      this.bandDisplay = new Float32Array(BANDS);
       this.bandBinMap = [];
+
       this.time = 0;
       this.lastTime = performance.now() / 1000;
       this.bokeh = [];
 
-      /* history texture: HIST_W columns × BANDS rows */
       this.histPixels = new Uint8Array(HIST_W * BANDS * 4);
       this.histTex = new THREE.DataTexture(
         this.histPixels, HIST_W, BANDS, THREE.RGBAFormat
@@ -221,7 +227,7 @@
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = FFT_SIZE;
-        this.analyser.smoothingTimeConstant = 0.5;
+        this.analyser.smoothingTimeConstant = 0.6;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -267,6 +273,8 @@
       }
     }
 
+    /* ---- history with per-band normalization ---- */
+
     _updateHistory() {
       for (let b = 0; b < BANDS; b++) {
         const [lo, hi] = this.bandBinMap[b];
@@ -274,12 +282,33 @@
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
         const raw = s / (hi - lo);
 
-        if (raw > this.bandSmoothed[b])
-          this.bandSmoothed[b] += (raw - this.bandSmoothed[b]) * 0.55;
-        else
-          this.bandSmoothed[b] += (raw - this.bandSmoothed[b]) * 0.12;
+        /* Adaptive baseline: slow EMA tracks the "quiet" level.
+         * Anything above this is a peak; anything below is silence.
+         * ~4-5 seconds to converge at 60 fps.                     */
+        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.005;
 
-        const v = Math.min(255, Math.round(this.bandSmoothed[b] * 255));
+        /* Adaptive ceiling: follows peaks up instantly,
+         * decays very slowly so the range stays stable.           */
+        if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
+        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.001;
+
+        /* Normalize: floor is 80% of the running average so that
+         * even moderate-level audio produces visible mountains.
+         * Range is clamped to a minimum to avoid division noise.  */
+        const floor = this.bandAvg[b] * 0.8;
+        const range = Math.max(this.bandPeak[b] - floor, 0.03);
+        const norm = Math.max(0, Math.min(1, (raw - floor) / range));
+
+        /* Fast attack / slow decay for the display value.
+         * This is what gets written to the history texture —
+         * instant peaks with gradual slopes create mountains.     */
+        if (norm > this.bandDisplay[b]) {
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.85;
+        } else {
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.045;
+        }
+
+        const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
         const idx = (b * HIST_W + this.writeCol) * 4;
         this.histPixels[idx] = v;
         this.histPixels[idx + 1] = v;
@@ -347,7 +376,7 @@
 
     _updBokeh() {
       let en = 0;
-      for (let b = 0; b < BANDS; b++) en += this.bandSmoothed[b];
+      for (let b = 0; b < BANDS; b++) en += this.bandDisplay[b];
       en /= BANDS;
       this.bokeh.forEach((b) => {
         b.mesh.position.x =
