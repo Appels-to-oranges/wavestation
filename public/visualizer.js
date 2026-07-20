@@ -100,17 +100,17 @@
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
     "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
     "",
-    "    float ridgeY = bandBase + bandH * 0.06 + amp * bandH * 0.9;",
+    "    float ridgeY = bandBase + bandH * 0.04 + amp * bandH * 0.94;",
     "    float dist = y - ridgeY;",
     "",
-    "    float glow = exp(-dist * dist / 0.00035);",
+    "    float glow = exp(-dist * dist / 0.00018);",
     "",
     "    float fill = 0.0;",
-    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.07) {",
-    "      fill = smoothstep(bandBase, ridgeY, y) * 0.3;",
+    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.05) {",
+    "      fill = smoothstep(bandBase, ridgeY, y) * 0.4;",
     "    }",
     "",
-    "    acc += col * (glow * 1.8 + fill);",
+    "    acc += col * (glow * 2.0 + fill);",
     "  }",
     "",
     "  gl_FragColor = vec4(vec3(0.039) + acc, 1.0);",
@@ -227,7 +227,9 @@
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = FFT_SIZE;
-        this.analyser.smoothingTimeConstant = 0.6;
+        this.analyser.minDecibels = -65;
+        this.analyser.maxDecibels = -15;
+        this.analyser.smoothingTimeConstant = 0.55;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -282,30 +284,31 @@
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
         const raw = s / (hi - lo);
 
-        /* Adaptive baseline: slow EMA tracks the "quiet" level.
-         * Anything above this is a peak; anything below is silence.
-         * ~4-5 seconds to converge at 60 fps.                     */
-        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.005;
+        /* Adaptive baseline: very slow EMA (~8s to converge).
+         * This represents the band's "resting" energy level.   */
+        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.003;
 
-        /* Adaptive ceiling: follows peaks up instantly,
-         * decays very slowly so the range stays stable.           */
+        /* Adaptive ceiling: instant rise, very slow decay.     */
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
-        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.001;
+        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.0008;
 
-        /* Normalize: floor is 80% of the running average so that
-         * even moderate-level audio produces visible mountains.
-         * Range is clamped to a minimum to avoid division noise.  */
-        const floor = this.bandAvg[b] * 0.8;
-        const range = Math.max(this.bandPeak[b] - floor, 0.03);
-        const norm = Math.max(0, Math.min(1, (raw - floor) / range));
+        /* Normalize: subtract the baseline and scale by the
+         * dynamic range.  Floor sits well below average so
+         * even steady-state audio registers as non-zero.       */
+        const floor = this.bandAvg[b] * 0.5;
+        const range = Math.max(this.bandPeak[b] - floor, 0.015);
+        let norm = Math.max(0, (raw - floor) / range);
 
-        /* Fast attack / slow decay for the display value.
-         * This is what gets written to the history texture —
-         * instant peaks with gradual slopes create mountains.     */
+        /* Power curve: sqrt expands small peaks into bigger
+         * mountains while keeping the top end from clipping.   */
+        norm = Math.pow(Math.min(norm, 1.5), 0.6);
+        norm = Math.min(norm, 1);
+
+        /* Fast attack / slow decay → mountain silhouettes      */
         if (norm > this.bandDisplay[b]) {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.85;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.9;
         } else {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.045;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.035;
         }
 
         const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
