@@ -6,7 +6,7 @@
   /* ===== Tunables (mutable at runtime) ===== */
   const cfg = {
     bands: 24,
-    histW: 510,
+    histW: 250,
     fftSize: 2048,
     freqLo: 30,
     freqHi: 18000,
@@ -15,10 +15,10 @@
 
     orbitSpeed: 0.15,
     orbitRadius: 20,
-    orbitHeight: 8,
+    orbitHeight: 5,
     chartSize: 16,
-    peakHeight: 3.0,
-    fov: 59,
+    peakHeight: 2.0,
+    fov: 50,
 
     smoothPasses: 12,
     fftSmooth: 0.95,
@@ -28,7 +28,7 @@
     floorFactor: 0.99,
 
     lineOpacity: 1.0,
-    fillOpacity: 0.60,
+    fillOpacity: 0.10,
 
     minDb: -80,
     maxDb: 0,
