@@ -164,8 +164,8 @@
   /* ===== Visualizer ===== */
 
   const FLOW_PER_BAND = 50;
-  const FLOW_STEPS = 50;
-  const FLOW_STEP_SIZE = 0.18;
+  const FLOW_STEPS = 80;
+  const FLOW_STEP_SIZE = 0.25;
 
   class Visualizer {
     constructor(canvas) {
@@ -531,8 +531,8 @@
           this.scene.add(line);
 
           const seed = b * 31.7 + l * 3.1;
-          const sx = simplex3(seed, 0, 0) * half * 0.95;
-          const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.4;
+          const sx = simplex3(seed, 0, 0) * half * 1.4;
+          const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
 
           this.perlinData.push({ line, geo, mat, band: b, bandT, sx, sz, seed });
         }
@@ -541,26 +541,27 @@
 
     _updatePerlin() {
       const half = cfg.chartSize / 2;
-      const t = this.time * 0.1;
-      const noiseFreq = 0.15;
+      const bound = half * 1.4;
+      const t = this.time * 0.04;
+      const noiseFreq = 0.06;
 
       for (let p = 0; p < this.perlinData.length; p++) {
         const d = this.perlinData[p];
         const arr = d.geo.getAttribute("position").array;
         const amp = this.bandDisplay[d.band] || 0;
 
-        const opacity = (0.05 + amp * 0.9) * cfg.lineOpacity;
+        const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
         d.mat.opacity = opacity;
 
-        const startX = d.sx + simplex3(d.seed, t * 0.3, 0) * 1.5;
-        const startZ = d.sz + simplex3(0, d.seed, t * 0.3) * 0.8;
+        const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * 0.8;
+        const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * 0.4;
         const yBase = amp * cfg.peakHeight;
 
         let cx = startX;
         let cz = startZ;
 
         for (let i = 0; i < FLOW_STEPS; i++) {
-          const angle = fbm3(cx * noiseFreq, cz * noiseFreq, t, 3) * Math.PI * 2;
+          const angle = fbm3(cx * noiseFreq, cz * noiseFreq, t, 2) * Math.PI * 2;
           const yNoise = fbm3(cx * noiseFreq + 200, cz * noiseFreq + 200, t, 2);
           const y = yBase * (0.5 + 0.5 * (yNoise + 1));
 
@@ -568,12 +569,11 @@
           arr[i * 3 + 1] = y;
           arr[i * 3 + 2] = cz;
 
-          const step = FLOW_STEP_SIZE * (0.6 + amp * 0.8);
-          cx += Math.cos(angle) * step;
-          cz += Math.sin(angle) * step;
+          cx += Math.cos(angle) * FLOW_STEP_SIZE;
+          cz += Math.sin(angle) * FLOW_STEP_SIZE;
 
-          cx = Math.max(-half, Math.min(half, cx));
-          cz = Math.max(-half, Math.min(half, cz));
+          cx = Math.max(-bound, Math.min(bound, cx));
+          cz = Math.max(-bound, Math.min(bound, cz));
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
