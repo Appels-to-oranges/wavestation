@@ -12,7 +12,7 @@
   const FREQ_HI = 18000;
   const NM_RED = 780;
   const NM_VIOLET = 380;
-  const SMOOTH = 0.85;
+  const SMOOTH = 1.0;
   const AMBIENT_SMOOTH = 0.04;
 
   /* ===== Hz → nm → RGB ===== */
@@ -88,7 +88,9 @@
     "  vec3 acc = vec3(0.0);",
     "  float occlude = 0.0;",
     "",
-    "  for (int di = -2; di <= 2; di++) {",
+    "  float histX = mod(vUv.x + uWritePos, 1.0);",
+    "",
+    "  for (int di = -4; di <= 4; di++) {",
     "    int idx = slot + di;",
     "    if (idx < 0 || idx >= BANDS) continue;",
     "",
@@ -96,25 +98,23 @@
     "    vec3 col = texture2D(uColors, vec2(ft, 0.5)).rgb;",
     "",
     "    float bandBase = -1.0 + float(idx) * slotH;",
-    "",
-    "    float histX = mod(vUv.x + uWritePos, 1.0);",
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
     "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
     "",
-    "    float ridgeY = bandBase + amp * slotH * 1.6;",
+    "    float ridgeY = bandBase + amp * slotH * 3.0;",
     "    float dist = y - ridgeY;",
     "",
-    "    float glow = exp(-dist * dist / 0.00008);",
+    "    float glow = exp(-dist * dist / 0.00005);",
     "",
     "    float fill = 0.0;",
     "    if (y >= bandBase && y < ridgeY) {",
-    "      fill = smoothstep(bandBase, ridgeY, y) * 0.35;",
+    "      fill = smoothstep(bandBase, ridgeY, y) * 0.25;",
     "    }",
     "",
-    "    acc += col * (glow * 2.2 + fill);",
+    "    acc += col * (glow * 2.5 + fill);",
     "",
     "    if (idx < slot && y < ridgeY) {",
-    "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.7);",
+    "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.8);",
     "    }",
     "  }",
     "",
@@ -236,7 +236,7 @@
         this.analyser.fftSize = FFT_SIZE;
         this.analyser.minDecibels = -60;
         this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.1;
+        this.analyser.smoothingTimeConstant = 0.05;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -299,17 +299,14 @@
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
         else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.0008;
 
-        const floor = this.bandAvg[b] * 0.6;
-        const range = Math.max(this.bandPeak[b] - floor, 0.015);
-        let norm = Math.max(0, (raw - floor) / range);
-        norm = Math.pow(Math.min(norm, 1.4), 0.8);
-        norm = Math.min(norm, 1);
+        const floor = this.bandAvg[b] * 0.92;
+        const range = Math.max(this.bandPeak[b] - floor, 0.01);
+        const norm = Math.min(1, Math.max(0, (raw - floor) / range));
 
-        /* Near-instant attack, fast decay → sharp spikes       */
         if (norm > this.bandDisplay[b]) {
           this.bandDisplay[b] = norm;
         } else {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.22;
+          this.bandDisplay[b] *= 0.55;
         }
 
         const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
