@@ -236,7 +236,7 @@
         const norm = Math.min(1, Math.max(0, (raw - floor) / range));
 
         if (norm > this.bandDisplay[b]) {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.4;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.85;
         } else {
           this.bandDisplay[b] *= cfg.decay;
         }
