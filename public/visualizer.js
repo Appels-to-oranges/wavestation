@@ -5,33 +5,33 @@
 
   /* ===== Tunables (mutable at runtime) ===== */
   const cfg = {
-    bands: 12,
-    histW: 400,
+    bands: 24,
+    histW: 510,
     fftSize: 2048,
     freqLo: 30,
     freqHi: 18000,
     nmRed: 780,
     nmViolet: 380,
 
-    orbitSpeed: 0.06,
-    orbitRadius: 9,
-    orbitHeight: 14,
-    chartSize: 6,
-    peakHeight: 4.0,
-    fov: 40,
+    orbitSpeed: 0.15,
+    orbitRadius: 20,
+    orbitHeight: 8,
+    chartSize: 16,
+    peakHeight: 3.0,
+    fov: 59,
 
-    smoothPasses: 3,
-    fftSmooth: 0.05,
-    decay: 0.55,
+    smoothPasses: 12,
+    fftSmooth: 0.95,
+    decay: 0.10,
     avgRate: 0.003,
-    peakDecay: 0.003,
-    floorFactor: 0.92,
+    peakDecay: 0.0005,
+    floorFactor: 0.99,
 
-    lineOpacity: 0.95,
-    fillOpacity: 0.15,
+    lineOpacity: 1.0,
+    fillOpacity: 0.60,
 
-    minDb: -60,
-    maxDb: -10,
+    minDb: -80,
+    maxDb: 0,
   };
 
   /* Catmull-Rom interpolation */
