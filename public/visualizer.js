@@ -5,7 +5,7 @@
 
   /* ===== Config ===== */
   const BANDS = 24;
-  const HIST_W = 280;
+  const HIST_W = 400;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
   const FREQ_LO = 30;
@@ -93,8 +93,6 @@
     "    int idx = slot + di;",
     "    if (idx < 0 || idx >= BANDS) continue;",
     "",
-    "    vec3 yCol = texture2D(uColors, vec2(vUv.y, 0.5)).rgb;",
-    "",
     "    float bandBase = -1.0 + float(idx) * slotH;",
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
     "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
@@ -109,7 +107,7 @@
     "      fill = smoothstep(bandBase, ridgeY, y) * 0.25;",
     "    }",
     "",
-    "    acc += yCol * (glow * 2.5 + fill);",
+    "    acc += vec3(1.0) * (glow * 2.5 + fill);",
     "",
     "    if (idx < slot && y < ridgeY) {",
     "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.8);",
@@ -234,7 +232,7 @@
         this.analyser.fftSize = FFT_SIZE;
         this.analyser.minDecibels = -60;
         this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.3;
+        this.analyser.smoothingTimeConstant = 0.05;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -289,16 +287,10 @@
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
         const raw = s / (hi - lo);
 
-        /* Frequency-dependent rates: bass bands smooth more, treble stays snappy */
-        const bandFrac = b / BANDS;
-        const avgRate = 0.001 + bandFrac * 0.004;
-        const peakDecay = 0.001 + bandFrac * 0.003;
-        const displayDecay = 0.75 + bandFrac * 0.15;
-
-        this.bandAvg[b] += (raw - this.bandAvg[b]) * avgRate;
+        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.003;
 
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
-        else this.bandPeak[b] += (raw - this.bandPeak[b]) * peakDecay;
+        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.003;
 
         const floor = this.bandAvg[b] * 0.92;
         const range = Math.max(this.bandPeak[b] - floor, 0.01);
@@ -307,7 +299,7 @@
         if (norm > this.bandDisplay[b]) {
           this.bandDisplay[b] = norm;
         } else {
-          this.bandDisplay[b] *= displayDecay;
+          this.bandDisplay[b] *= 0.55;
         }
 
         const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
