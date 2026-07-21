@@ -5,14 +5,14 @@
 
   /* ===== Config ===== */
   const BANDS = 16;
-  const HIST_W = 512;
+  const HIST_W = 280;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
   const FREQ_LO = 30;
   const FREQ_HI = 18000;
   const NM_RED = 780;
   const NM_VIOLET = 380;
-  const SMOOTH = 0.35;
+  const SMOOTH = 0.7;
   const AMBIENT_SMOOTH = 0.04;
 
   /* ===== Hz → nm → RGB ===== */
@@ -227,9 +227,9 @@
         const src = this.audioCtx.createMediaElementSource(el);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = FFT_SIZE;
-        this.analyser.minDecibels = -65;
-        this.analyser.maxDecibels = -15;
-        this.analyser.smoothingTimeConstant = 0.55;
+        this.analyser.minDecibels = -60;
+        this.analyser.maxDecibels = -10;
+        this.analyser.smoothingTimeConstant = 0.15;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -292,23 +292,17 @@
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
         else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.0008;
 
-        /* Normalize: subtract the baseline and scale by the
-         * dynamic range.  Floor sits well below average so
-         * even steady-state audio registers as non-zero.       */
-        const floor = this.bandAvg[b] * 0.5;
+        const floor = this.bandAvg[b] * 0.6;
         const range = Math.max(this.bandPeak[b] - floor, 0.015);
         let norm = Math.max(0, (raw - floor) / range);
-
-        /* Power curve: sqrt expands small peaks into bigger
-         * mountains while keeping the top end from clipping.   */
-        norm = Math.pow(Math.min(norm, 1.5), 0.6);
+        norm = Math.pow(Math.min(norm, 1.4), 0.8);
         norm = Math.min(norm, 1);
 
-        /* Fast attack / slow decay → mountain silhouettes      */
+        /* Near-instant attack, fast decay → sharp spikes       */
         if (norm > this.bandDisplay[b]) {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.9;
+          this.bandDisplay[b] = norm;
         } else {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.035;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.22;
         }
 
         const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
