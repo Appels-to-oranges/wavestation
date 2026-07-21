@@ -518,14 +518,14 @@
         const bandT = bands > 1 ? b / (bands - 1) : 0.5;
         const hz = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
-        const color = new THREE.Color(cr, cg, cb);
+        const bandColor = new THREE.Color(cr, cg, cb);
 
         for (let l = 0; l < FLOW_PER_BAND; l++) {
           const positions = new Float32Array(FLOW_STEPS * 3);
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
           const mat = new THREE.LineBasicMaterial({
-            color, transparent: true, opacity: 0.05, depthWrite: false,
+            color: 0xffffff, transparent: true, opacity: 0.05, depthWrite: false,
           });
           const line = new THREE.Line(geo, mat);
           this.scene.add(line);
@@ -534,7 +534,7 @@
           const sx = simplex3(seed, 0, 0) * half * 1.4;
           const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
 
-          this.perlinData.push({ line, geo, mat, band: b, bandT, sx, sz, seed });
+          this.perlinData.push({ line, geo, mat, band: b, bandT, bandColor, sx, sz, seed });
         }
       }
     }
@@ -552,6 +552,7 @@
 
         const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
         d.mat.opacity = opacity;
+        d.mat.color.setRGB(1, 1, 1).lerp(d.bandColor, amp);
 
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * 0.8;
         const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * 0.4;
