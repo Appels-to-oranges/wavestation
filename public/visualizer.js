@@ -5,13 +5,13 @@
 
   /* ===== Config ===== */
   const BANDS = 40;
-  const HIST_W = 280;
+  const HIST_W = 350;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
   const FREQ_LO = 30;
   const FREQ_HI = 18000;
-  const NM_RED = 780;
-  const NM_VIOLET = 380;
+  const NM_RED = 645;
+  const NM_VIOLET = 410;
   const SMOOTH = 1.0;
   const AMBIENT_SMOOTH = 0.04;
 
@@ -86,16 +86,12 @@
     "  int slot = int(floor((y + 1.0) / slotH));",
     "",
     "  vec3 acc = vec3(0.0);",
-    "  float occlude = 0.0;",
-    "",
     "  float histX = mod(vUv.x + uWritePos, 1.0);",
+    "  vec3 yCol = texture2D(uColors, vec2(vUv.y, 0.5)).rgb;",
     "",
     "  for (int di = -4; di <= 4; di++) {",
     "    int idx = slot + di;",
     "    if (idx < 0 || idx >= BANDS) continue;",
-    "",
-    "    float ft = (float(idx) + 0.5) / float(BANDS);",
-    "    vec3 col = texture2D(uColors, vec2(ft, 0.5)).rgb;",
     "",
     "    float bandBase = -1.0 + float(idx) * slotH;",
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
@@ -104,23 +100,17 @@
     "    float ridgeY = bandBase + amp * slotH * 3.0;",
     "    float dist = y - ridgeY;",
     "",
-    "    float glow = exp(-dist * dist / 0.00005);",
+    "    float glow = exp(-dist * dist / 0.00004);",
     "",
     "    float fill = 0.0;",
     "    if (y >= bandBase && y < ridgeY) {",
     "      fill = smoothstep(bandBase, ridgeY, y) * 0.25;",
     "    }",
     "",
-    "    acc += col * (glow * 2.5 + fill);",
-    "",
-    "    if (idx < slot && y < ridgeY) {",
-    "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.8);",
-    "    }",
+    "    acc += yCol * (glow * 2.5 + fill);",
     "  }",
     "",
-    "  vec3 result = vec3(0.039) + acc;",
-    "  result *= 1.0 - occlude;",
-    "  gl_FragColor = vec4(result, 1.0);",
+    "  gl_FragColor = vec4(vec3(0.039) + acc, 1.0);",
     "}",
   ].join("\n");
 
