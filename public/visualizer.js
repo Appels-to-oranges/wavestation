@@ -165,7 +165,10 @@
         this.analyser.maxDecibels = cfg.maxDb;
         this.analyser.smoothingTimeConstant = cfg.fftSmooth;
         src.connect(this.analyser);
-        this.analyser.connect(this.audioCtx.destination);
+        this.delayNode = this.audioCtx.createDelay(1.0);
+        this.delayNode.delayTime.value = 0.08;
+        this.analyser.connect(this.delayNode);
+        this.delayNode.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
         this.connected = true;
       } catch (e) {
@@ -236,7 +239,7 @@
         const norm = Math.min(1, Math.max(0, (raw - floor) / range));
 
         if (norm > this.bandDisplay[b]) {
-          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.85;
+          this.bandDisplay[b] += (norm - this.bandDisplay[b]) * 0.4;
         } else {
           this.bandDisplay[b] *= cfg.decay;
         }
