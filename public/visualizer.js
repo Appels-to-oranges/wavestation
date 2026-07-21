@@ -4,7 +4,7 @@
   if (typeof THREE === "undefined") return;
 
   /* ===== Config ===== */
-  const BANDS = 16;
+  const BANDS = 40;
   const HIST_W = 280;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
@@ -12,7 +12,7 @@
   const FREQ_HI = 18000;
   const NM_RED = 780;
   const NM_VIOLET = 380;
-  const SMOOTH = 0.7;
+  const SMOOTH = 0.85;
   const AMBIENT_SMOOTH = 0.04;
 
   /* ===== Hz → nm → RGB ===== */
@@ -72,7 +72,7 @@
     }`;
 
   const specFrag = [
-    "#define BANDS 16",
+    "#define BANDS 40",
     "precision highp float;",
     "uniform sampler2D uHistory;",
     "uniform sampler2D uColors;",
@@ -82,12 +82,13 @@
     "void main() {",
     "  float y = (vUv.y - 0.5) * 2.0;",
     "  float slotH = 2.0 / float(BANDS);",
-    "  float bandH = slotH * 0.72;",
+    "  float bandH = slotH * 0.85;",
     "  int slot = int(floor((y + 1.0) / slotH));",
     "",
     "  vec3 acc = vec3(0.0);",
+    "  float occlude = 0.0;",
     "",
-    "  for (int di = -1; di <= 1; di++) {",
+    "  for (int di = -2; di <= 2; di++) {",
     "    int idx = slot + di;",
     "    if (idx < 0 || idx >= BANDS) continue;",
     "",
@@ -100,20 +101,26 @@
     "    float bandT = (float(idx) + 0.5) / float(BANDS);",
     "    float amp = texture2D(uHistory, vec2(histX, bandT)).r;",
     "",
-    "    float ridgeY = bandBase + bandH * 0.04 + amp * bandH * 0.94;",
+    "    float ridgeY = bandBase + amp * slotH * 1.6;",
     "    float dist = y - ridgeY;",
     "",
-    "    float glow = exp(-dist * dist / 0.00018);",
+    "    float glow = exp(-dist * dist / 0.00008);",
     "",
     "    float fill = 0.0;",
-    "    if (y >= bandBase && y < ridgeY && ridgeY > bandBase + bandH * 0.05) {",
-    "      fill = smoothstep(bandBase, ridgeY, y) * 0.4;",
+    "    if (y >= bandBase && y < ridgeY) {",
+    "      fill = smoothstep(bandBase, ridgeY, y) * 0.35;",
     "    }",
     "",
-    "    acc += col * (glow * 2.0 + fill);",
+    "    acc += col * (glow * 2.2 + fill);",
+    "",
+    "    if (idx < slot && y < ridgeY) {",
+    "      occlude = max(occlude, smoothstep(ridgeY, bandBase, y) * 0.7);",
+    "    }",
     "  }",
     "",
-    "  gl_FragColor = vec4(vec3(0.039) + acc, 1.0);",
+    "  vec3 result = vec3(0.039) + acc;",
+    "  result *= 1.0 - occlude;",
+    "  gl_FragColor = vec4(result, 1.0);",
     "}",
   ].join("\n");
 
@@ -229,7 +236,7 @@
         this.analyser.fftSize = FFT_SIZE;
         this.analyser.minDecibels = -60;
         this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.15;
+        this.analyser.smoothingTimeConstant = 0.1;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
