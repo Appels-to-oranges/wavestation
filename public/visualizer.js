@@ -15,10 +15,10 @@
   const AMBIENT_SMOOTH = 0.04;
 
   const ORBIT_SPEED = 0.06;
-  const ORBIT_RADIUS = 12;
-  const ORBIT_HEIGHT = 7;
+  const ORBIT_RADIUS = 9;
+  const ORBIT_HEIGHT = 14;
   const CHART_SIZE = 6;
-  const PEAK_HEIGHT = 2.5;
+  const PEAK_HEIGHT = 4.0;
 
   /* Catmull-Rom spline: returns smoothed Y values for an input array */
   function catmullRom(src, outLen) {
@@ -237,30 +237,61 @@
         const bandT = b / (BANDS - 1);
         const hz = FREQ_LO * Math.pow(FREQ_HI / FREQ_LO, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
+        const color = new THREE.Color(cr, cg, cb);
 
-        const positions = new Float32Array(HIST_W * 3);
         const z = -CHART_SIZE / 2 + bandT * CHART_SIZE;
 
+        /* Line on top */
+        const linePos = new Float32Array(HIST_W * 3);
         for (let i = 0; i < HIST_W; i++) {
-          positions[i * 3] = -CHART_SIZE / 2 + (i / (HIST_W - 1)) * CHART_SIZE;
-          positions[i * 3 + 1] = 0;
-          positions[i * 3 + 2] = z;
+          linePos[i * 3] = -CHART_SIZE / 2 + (i / (HIST_W - 1)) * CHART_SIZE;
+          linePos[i * 3 + 1] = 0;
+          linePos[i * 3 + 2] = z;
         }
-
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-
-        const color = new THREE.Color(cr, cg, cb);
-        const mat = new THREE.LineBasicMaterial({
+        const lineGeo = new THREE.BufferGeometry();
+        lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
+        const lineMat = new THREE.LineBasicMaterial({
           color,
           linewidth: 1,
           transparent: true,
-          opacity: 0.9,
+          opacity: 0.95,
         });
-
-        const line = new THREE.Line(geo, mat);
+        const line = new THREE.Line(lineGeo, lineMat);
         this.scene.add(line);
-        this.ridgeLines.push({ line, geo, z });
+
+        /* Filled mesh underneath: triangle strip from ridge top down to y=0 */
+        const fillVerts = new Float32Array(HIST_W * 2 * 3);
+        const fillGeo = new THREE.BufferGeometry();
+        fillGeo.setAttribute("position", new THREE.BufferAttribute(fillVerts, 3));
+        const indices = [];
+        for (let i = 0; i < HIST_W - 1; i++) {
+          const top = i * 2;
+          const bot = i * 2 + 1;
+          const topNext = (i + 1) * 2;
+          const botNext = (i + 1) * 2 + 1;
+          indices.push(top, bot, topNext);
+          indices.push(bot, botNext, topNext);
+        }
+        fillGeo.setIndex(indices);
+        const fillMat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.15,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const fillMesh = new THREE.Mesh(fillGeo, fillMat);
+        this.scene.add(fillMesh);
+
+        this.ridgeLines.push({ line, lineGeo, fillGeo, z });
+      }
+    }
+
+    _smoothPass(arr, passes) {
+      for (let p = 0; p < passes; p++) {
+        for (let i = 1; i < arr.length - 1; i++) {
+          arr[i] = arr[i] * 0.5 + (arr[i - 1] + arr[i + 1]) * 0.25;
+        }
       }
     }
 
@@ -272,16 +303,32 @@
           raw[i] = this.history[b][(this.writeCol + i) % HIST_W];
         }
 
+        this._smoothPass(raw, 3);
         const smooth = catmullRom(raw, HIST_W);
 
-        const posAttr = this.ridgeLines[b].geo.getAttribute("position");
-        const arr = posAttr.array;
+        const lineAttr = this.ridgeLines[b].lineGeo.getAttribute("position");
+        const lineArr = lineAttr.array;
+        const fillAttr = this.ridgeLines[b].fillGeo.getAttribute("position");
+        const fillArr = fillAttr.array;
+        const z = this.ridgeLines[b].z;
 
         for (let i = 0; i < HIST_W; i++) {
-          arr[i * 3 + 1] = Math.max(0, smooth[i]) * PEAK_HEIGHT;
+          const x = -CHART_SIZE / 2 + (i / (HIST_W - 1)) * CHART_SIZE;
+          const y = Math.max(0, smooth[i]) * PEAK_HEIGHT;
+
+          lineArr[i * 3 + 1] = y;
+
+          const ti = i * 2;
+          fillArr[ti * 3] = x;
+          fillArr[ti * 3 + 1] = y;
+          fillArr[ti * 3 + 2] = z;
+          fillArr[(ti + 1) * 3] = x;
+          fillArr[(ti + 1) * 3 + 1] = 0;
+          fillArr[(ti + 1) * 3 + 2] = z;
         }
 
-        posAttr.needsUpdate = true;
+        lineAttr.needsUpdate = true;
+        fillAttr.needsUpdate = true;
       }
     }
 
