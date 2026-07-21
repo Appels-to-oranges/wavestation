@@ -4,7 +4,7 @@
   if (typeof THREE === "undefined") return;
 
   /* ===== Config ===== */
-  const BANDS = 40;
+  const BANDS = 24;
   const HIST_W = 280;
   const BOKEH_COUNT = 18;
   const FFT_SIZE = 2048;
@@ -234,7 +234,7 @@
         this.analyser.fftSize = FFT_SIZE;
         this.analyser.minDecibels = -60;
         this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.05;
+        this.analyser.smoothingTimeConstant = 0.3;
         src.connect(this.analyser);
         this.analyser.connect(this.audioCtx.destination);
         this.rawData = new Uint8Array(this.analyser.frequencyBinCount);
@@ -289,13 +289,16 @@
         for (let j = lo; j < hi && j < this.binCount; j++) s += this.smoothed[j];
         const raw = s / (hi - lo);
 
-        /* Adaptive baseline: very slow EMA (~8s to converge).
-         * This represents the band's "resting" energy level.   */
-        this.bandAvg[b] += (raw - this.bandAvg[b]) * 0.003;
+        /* Frequency-dependent rates: bass bands smooth more, treble stays snappy */
+        const bandFrac = b / BANDS;
+        const avgRate = 0.001 + bandFrac * 0.004;
+        const peakDecay = 0.001 + bandFrac * 0.003;
+        const displayDecay = 0.75 + bandFrac * 0.15;
 
-        /* Adaptive ceiling: instant rise, very slow decay.     */
+        this.bandAvg[b] += (raw - this.bandAvg[b]) * avgRate;
+
         if (raw > this.bandPeak[b]) this.bandPeak[b] = raw;
-        else this.bandPeak[b] += (raw - this.bandPeak[b]) * 0.003;
+        else this.bandPeak[b] += (raw - this.bandPeak[b]) * peakDecay;
 
         const floor = this.bandAvg[b] * 0.92;
         const range = Math.max(this.bandPeak[b] - floor, 0.01);
@@ -304,7 +307,7 @@
         if (norm > this.bandDisplay[b]) {
           this.bandDisplay[b] = norm;
         } else {
-          this.bandDisplay[b] *= 0.55;
+          this.bandDisplay[b] *= displayDecay;
         }
 
         const v = Math.min(255, Math.round(this.bandDisplay[b] * 255));
