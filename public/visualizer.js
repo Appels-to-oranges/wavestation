@@ -34,6 +34,15 @@
     maxDb: 0,
 
     audioDelay: 0.10,
+
+    flowPerBand: 50,
+    flowSteps: 80,
+    flowStepSize: 0.25,
+    flowNoiseFreq: 0.06,
+    flowNoiseSpeed: 0.04,
+    flowOctaves: 2,
+    flowEdgeFade: 0.6,
+    flowStartDrift: 0.8,
   };
 
   const THEMES = ["wavestation", "perlinstation"];
@@ -163,9 +172,7 @@
 
   /* ===== Visualizer ===== */
 
-  const FLOW_PER_BAND = 50;
-  const FLOW_STEPS = 80;
-  const FLOW_STEP_SIZE = 0.25;
+  const _white = new THREE.Color(1, 1, 1);
 
   class Visualizer {
     constructor(canvas) {
@@ -410,7 +417,7 @@
         const bandT = bands > 1 ? b / (bands - 1) : 0.5;
         const hz = cfg.freqLo * Math.pow(cfg.freqHi / cfg.freqLo, bandT);
         const [cr, cg, cb] = hzToRGB(hz);
-        const color = new THREE.Color(cr, cg, cb);
+        const bandColor = new THREE.Color(cr, cg, cb);
         const z = -cfg.chartSize / 2 + bandT * cfg.chartSize;
 
         const linePos = new Float32Array(histW * 3);
@@ -421,7 +428,7 @@
         }
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: cfg.lineOpacity });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: cfg.lineOpacity });
         const line = new THREE.Line(lineGeo, lineMat);
         this.scene.add(line);
 
@@ -435,13 +442,13 @@
         }
         fillGeo.setIndex(indices);
         const fillMat = new THREE.MeshBasicMaterial({
-          color, transparent: true, opacity: cfg.fillOpacity,
+          color: 0xffffff, transparent: true, opacity: cfg.fillOpacity,
           side: THREE.DoubleSide, depthWrite: false,
         });
         const fillMesh = new THREE.Mesh(fillGeo, fillMat);
         this.scene.add(fillMesh);
 
-        this.ridgeData.push({ line, lineGeo, lineMat, fillGeo, fillMat, fillMesh, z });
+        this.ridgeData.push({ line, lineGeo, lineMat, fillGeo, fillMat, fillMesh, bandColor, z });
       }
     }
 
@@ -475,6 +482,10 @@
         const z = d.z;
         d.lineMat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
+
+        const amp = this.bandDisplay[b] || 0;
+        d.lineMat.color.copy(_white).lerp(d.bandColor, amp);
+        d.fillMat.color.copy(_white).lerp(d.bandColor, amp);
 
         for (let i = 0; i < histW; i++) {
           const x = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
@@ -520,9 +531,9 @@
         const [cr, cg, cb] = hzToRGB(hz);
         const bandColor = new THREE.Color(cr, cg, cb);
 
-        for (let l = 0; l < FLOW_PER_BAND; l++) {
-          const positions = new Float32Array(FLOW_STEPS * 3);
-          const colors = new Float32Array(FLOW_STEPS * 3);
+        for (let l = 0; l < cfg.flowPerBand; l++) {
+          const positions = new Float32Array(cfg.flowSteps * 3);
+          const colors = new Float32Array(cfg.flowSteps * 3);
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
           geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -544,12 +555,17 @@
     _updatePerlin() {
       const half = cfg.chartSize / 2;
       const bound = half * 1.4;
-      const t = this.time * 0.04;
-      const noiseFreq = 0.06;
+      const t = this.time * cfg.flowNoiseSpeed;
+      const nf = cfg.flowNoiseFreq;
+      const oct = Math.round(cfg.flowOctaves);
+      const steps = cfg.flowSteps;
+      const fadeStart = cfg.flowEdgeFade;
+      const fadeRange = Math.max(0.01, 1 - fadeStart);
 
       for (let p = 0; p < this.perlinData.length; p++) {
         const d = this.perlinData[p];
         const arr = d.geo.getAttribute("position").array;
+        const colArr = d.geo.getAttribute("color").array;
         const amp = this.bandDisplay[d.band] || 0;
 
         const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
@@ -559,34 +575,32 @@
         const colG = 1 + (d.bandColor.g - 1) * amp;
         const colB = 1 + (d.bandColor.b - 1) * amp;
 
-        const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * 0.8;
-        const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * 0.4;
+        const drift = cfg.flowStartDrift;
+        const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
+        const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5;
         const yBase = amp * cfg.peakHeight;
-        const colArr = d.geo.getAttribute("color").array;
 
         let cx = startX;
         let cz = startZ;
 
-        for (let i = 0; i < FLOW_STEPS; i++) {
-          const angle = fbm3(cx * noiseFreq, cz * noiseFreq, t, 2) * Math.PI * 2;
-          const yNoise = fbm3(cx * noiseFreq + 200, cz * noiseFreq + 200, t, 2);
+        for (let i = 0; i < steps; i++) {
+          const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
+          const yNoise = fbm3(cx * nf + 200, cz * nf + 200, t, 2);
           const y = yBase * (0.5 + 0.5 * (yNoise + 1));
 
           arr[i * 3]     = cx;
           arr[i * 3 + 1] = y;
           arr[i * 3 + 2] = cz;
 
-          const dx = Math.abs(cx) / bound;
-          const dz = Math.abs(cz) / bound;
-          const edge = Math.max(dx, dz);
-          const fade = edge < 0.6 ? 1 : Math.max(0, 1 - (edge - 0.6) / 0.4);
+          const edge = Math.max(Math.abs(cx) / bound, Math.abs(cz) / bound);
+          const fade = edge < fadeStart ? 1 : Math.max(0, 1 - (edge - fadeStart) / fadeRange);
 
           colArr[i * 3]     = colR * fade;
           colArr[i * 3 + 1] = colG * fade;
           colArr[i * 3 + 2] = colB * fade;
 
-          cx += Math.cos(angle) * FLOW_STEP_SIZE;
-          cz += Math.sin(angle) * FLOW_STEP_SIZE;
+          cx += Math.cos(angle) * cfg.flowStepSize;
+          cz += Math.sin(angle) * cfg.flowStepSize;
 
           cx = Math.max(-bound, Math.min(bound, cx));
           cz = Math.max(-bound, Math.min(bound, cz));
@@ -648,13 +662,22 @@
 
   /* ===== Theme button ===== */
 
+  function updateThemeSettings() {
+    const isWave = THEMES[currentTheme] === "wavestation";
+    document.querySelectorAll(".theme-wave").forEach(el => el.style.display = isWave ? "block" : "none");
+    document.querySelectorAll(".theme-perlin").forEach(el => el.style.display = isWave ? "none" : "block");
+  }
+
   const themeBtn = document.getElementById("theme-btn");
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
       const name = viz.switchTheme();
       themeBtn.title = name === "wavestation" ? "Theme: WaveStation" : "Theme: PerlinStation";
+      updateThemeSettings();
     });
   }
+
+  updateThemeSettings();
 
   /* ===== Settings wiring ===== */
 
@@ -705,6 +728,14 @@
     "s-min-db":       { key: "minDb" },
     "s-max-db":       { key: "maxDb" },
     "s-audio-delay":  { key: "audioDelay" },
+    "s-flow-per-band":  { key: "flowPerBand", rebuild: true },
+    "s-flow-steps":     { key: "flowSteps", rebuild: true },
+    "s-flow-step-size": { key: "flowStepSize" },
+    "s-flow-noise-freq":{ key: "flowNoiseFreq" },
+    "s-flow-noise-speed":{ key: "flowNoiseSpeed" },
+    "s-flow-octaves":   { key: "flowOctaves" },
+    "s-flow-edge-fade": { key: "flowEdgeFade" },
+    "s-flow-start-drift":{ key: "flowStartDrift" },
   };
 
   let rebuildTimer = null;
