@@ -43,6 +43,10 @@
 
     audioDelay: 0.10,
 
+    waveFlowStrength: 0,
+    waveFlowFreq: 0.15,
+    waveFlowSpeed: 0.1,
+
     flowPerBand: 50,
     flowSteps: 80,
 
@@ -506,17 +510,33 @@
         d.lineMat.color.copy(baseColor).lerp(d.bandColor, cBlend);
         d.fillMat.color.copy(baseColor).lerp(d.bandColor, cBlend);
 
+        const wfStr = cfg.waveFlowStrength;
+        const wfFreq = cfg.waveFlowFreq;
+        const wfT = this.time * cfg.waveFlowSpeed;
+
         for (let i = 0; i < histW; i++) {
-          const x = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
+          const baseX = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
           const y = Math.max(0, smooth[i]) * cfg.peakHeight;
+
+          let x = baseX;
+          let zv = z;
+          if (wfStr > 0) {
+            const nx = baseX * wfFreq;
+            const nz = z * wfFreq;
+            x += simplex3(nx, nz, wfT + b * 5.7) * wfStr;
+            zv += simplex3(nx + 100, nz + 100, wfT + b * 5.7) * wfStr;
+          }
+
+          lineArr[i * 3]     = x;
           lineArr[i * 3 + 1] = y;
+          lineArr[i * 3 + 2] = zv;
           const ti = i * 2;
           fillArr[ti * 3] = x;
           fillArr[ti * 3 + 1] = y;
-          fillArr[ti * 3 + 2] = z;
+          fillArr[ti * 3 + 2] = zv;
           fillArr[(ti + 1) * 3] = x;
           fillArr[(ti + 1) * 3 + 1] = 0;
-          fillArr[(ti + 1) * 3 + 2] = z;
+          fillArr[(ti + 1) * 3 + 2] = zv;
         }
 
         d.lineGeo.getAttribute("position").needsUpdate = true;
@@ -776,6 +796,7 @@
   function updateThemeSettings() {
     const isWave = THEMES[currentTheme] === "wavestation";
     document.querySelectorAll(".theme-perlin").forEach(el => el.style.display = isWave ? "none" : "block");
+    document.querySelectorAll(".theme-wave").forEach(el => el.style.display = isWave ? "block" : "none");
   }
 
   updateThemeSettings();
@@ -835,6 +856,9 @@
     "s-min-db":       { key: "minDb" },
     "s-max-db":       { key: "maxDb" },
     "s-audio-delay":  { key: "audioDelay" },
+    "s-wave-flow-strength": { key: "waveFlowStrength" },
+    "s-wave-flow-freq":     { key: "waveFlowFreq" },
+    "s-wave-flow-speed":    { key: "waveFlowSpeed" },
     "s-flow-per-band":  { key: "flowPerBand", rebuild: true },
     "s-flow-steps":     { key: "flowSteps", rebuild: true },
     "s-flow-noise-freq":{ key: "flowNoiseFreq" },
@@ -885,6 +909,7 @@
       lineWidth: 1, lineOpacity: 1.0, fillOpacity: 0.10,
       colorMix: 0, colorDecay: 0.03, colorBase: 0,
       bgBrightness: 0,
+      waveFlowStrength: 0, waveFlowFreq: 0.15, waveFlowSpeed: 0.1,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
     },
     perlinstation: {
