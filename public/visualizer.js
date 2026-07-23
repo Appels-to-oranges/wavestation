@@ -34,7 +34,7 @@
     colorMix: 0,
     colorDecay: 0.03,
     colorBase: 0,
-    bgBrightness: 0.04,
+    bgBrightness: 0,
     envelopeSteep: 1.0,
 
     minDb: -80,
@@ -197,8 +197,7 @@
     constructor(canvas) {
       this.canvas = canvas;
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-      const bg = Math.round(cfg.bgBrightness * 255);
-      this.renderer.setClearColor(new THREE.Color(bg/255, bg/255, bg/255), 1);
+      this.renderer.setClearColor(new THREE.Color(0, 0, 0), 1);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
       this.aspect = 1;
@@ -882,7 +881,7 @@
       decay: 0.10, avgRate: 0.003, peakDecay: 0.0005, floorFactor: 0.99,
       lineWidth: 1, lineOpacity: 1.0, fillOpacity: 0.10,
       colorMix: 0, colorDecay: 0.03, colorBase: 0,
-      bgBrightness: 0.04,
+      bgBrightness: 0,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
     },
     perlinstation: {
@@ -892,7 +891,7 @@
       decay: 0.60, avgRate: 0.05, peakDecay: 0.0005, floorFactor: 0.90,
       lineWidth: 1, lineOpacity: 0.20, fillOpacity: 0.15,
       colorMix: 0.70, colorDecay: 0.20, colorBase: 0,
-      bgBrightness: 0.04, envelopeSteep: 1.0,
+      bgBrightness: 0, envelopeSteep: 1.0,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
       flowPerBand: 20, flowSteps: 30, flowNoiseFreq: 0.03, flowNoiseSpeed: 0.10,
       flowOctaves: 2, flowEdgeFade: 0.20, flowStartDrift: 0.8,
@@ -1046,6 +1045,39 @@
   if (colorBaseCheck) {
     colorBaseCheck.addEventListener("change", () => {
       cfg.colorBase = colorBaseCheck.checked ? 1 : 0;
+    });
+  }
+
+  /* ===== Randomize ===== */
+
+  const randomizeBtn = document.getElementById("randomize-btn");
+  if (randomizeBtn) {
+    randomizeBtn.addEventListener("click", () => {
+      const rr = (lo, hi, step) => {
+        const steps = Math.round((hi - lo) / step);
+        return lo + Math.round(Math.random() * steps) * step;
+      };
+
+      Object.entries(sliders).forEach(([id, { key, rebuild }]) => {
+        const slider = document.getElementById(id);
+        if (!slider) return;
+        const lo = parseFloat(slider.min);
+        const hi = parseFloat(slider.max);
+        const step = parseFloat(slider.step) || 1;
+        const v = rr(lo, hi, step);
+        cfg[key] = v;
+        slider.value = v;
+        const valEl = document.getElementById("sv-" + id.slice(2));
+        if (valEl) {
+          if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+          else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
+        }
+      });
+
+      cfg.colorBase = Math.random() > 0.5 ? 1 : 0;
+      if (colorBaseCheck) colorBaseCheck.checked = cfg.colorBase > 0.5;
+
+      viz.rebuildCurrentTheme();
     });
   }
 

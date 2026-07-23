@@ -271,6 +271,26 @@ body {
 }
 .preset-del:hover { color: rgba(255,120,120,0.8); }
 
+/* Randomize */
+.randomize-btn {
+  width: 100%;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.randomize-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.85);
+}
+
 /* ===== Now Playing Bar ===== */
 .now-playing-bar {
   position: sticky;

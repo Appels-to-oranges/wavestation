@@ -137,8 +137,8 @@
             </label>
             <label class="setting-row" title="Background brightness — 0 = black, 1 = white">
               <span class="setting-label">Background</span>
-              <input type="range" class="setting-slider" id="s-bg-brightness" min="0" max="1" step="0.01" value="0.04" />
-              <span class="setting-val" id="sv-bg-brightness">0.04</span>
+              <input type="range" class="setting-slider" id="s-bg-brightness" min="0" max="1" step="0.01" value="0" />
+              <span class="setting-val" id="sv-bg-brightness">0</span>
             </label>
             <label class="setting-row" title="0 = always full color, 1 = base color at rest, band color on amplitude">
               <span class="setting-label">Color Mix</span>
@@ -292,6 +292,8 @@
             </div>
             <div class="preset-list" id="preset-list"></div>
           </div>
+
+          <button class="randomize-btn" id="randomize-btn" title="Randomize all visual settings">Randomize</button>
 
         </div>
       </div>
