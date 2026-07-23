@@ -656,7 +656,7 @@
 
         const drift = cfg.flowStartDrift;
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
-        const startZ = Math.max(-half, Math.min(half, d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5));
+        const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5;
 
         let cx = startX;
         let cz = startZ;
@@ -678,9 +678,12 @@
           arr[i * 3 + 1] = y;
           arr[i * 3 + 2] = cz;
 
-          const edge = Math.max(Math.abs(cx) / bound, Math.abs(cz) / bound);
+          const edgeX = Math.abs(cx) / half;
+          const edgeZ = Math.abs(cz) / half;
+          const edge = Math.max(edgeX, edgeZ);
           const fade = edge < fadeStart ? 1 : Math.max(0, 1 - (edge - fadeStart) / fadeRange);
 
+          const eFade = fade * envelope;
           const fr = colR * fade;
           const fg = colG * fade;
           const fb = colB * fade;
@@ -697,18 +700,15 @@
           fillArr[(ti+1) * 3 + 1] = 0;
           fillArr[(ti+1) * 3 + 2] = cz;
 
-          fillColArr[ti * 3]         = fr;
-          fillColArr[ti * 3 + 1]     = fg;
-          fillColArr[ti * 3 + 2]     = fb;
-          fillColArr[(ti+1) * 3]     = fr;
-          fillColArr[(ti+1) * 3 + 1] = fg;
-          fillColArr[(ti+1) * 3 + 2] = fb;
+          fillColArr[ti * 3]         = colR * eFade;
+          fillColArr[ti * 3 + 1]     = colG * eFade;
+          fillColArr[ti * 3 + 2]     = colB * eFade;
+          fillColArr[(ti+1) * 3]     = 0;
+          fillColArr[(ti+1) * 3 + 1] = 0;
+          fillColArr[(ti+1) * 3 + 2] = 0;
 
           cx += Math.cos(angle) * ss;
           cz += Math.sin(angle) * ss;
-
-          cx = Math.max(-bound, Math.min(bound, cx));
-          cz = Math.max(-half, Math.min(half, cz));
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
