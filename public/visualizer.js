@@ -652,7 +652,7 @@
 
         const drift = cfg.flowStartDrift;
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
-        const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5;
+        const startZ = Math.max(-half, Math.min(half, d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5));
 
         let cx = startX;
         let cz = startZ;
@@ -704,7 +704,7 @@
           cz += Math.sin(angle) * ss;
 
           cx = Math.max(-bound, Math.min(bound, cx));
-          cz = Math.max(-bound, Math.min(bound, cz));
+          cz = Math.max(-half, Math.min(half, cz));
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
