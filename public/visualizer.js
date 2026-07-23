@@ -66,6 +66,7 @@
     flowHistFade: 0.08,
     flowHistBlend: 0.2,
     flowBandSpread: 0,
+    flowSmooth: 3,
   };
 
   const THEMES = ["wavestation", "perlinstation"];
@@ -696,8 +697,26 @@
           arr[i * 3 + 1] = y;
           arr[i * 3 + 2] = cz;
 
-          const edgeX = Math.abs(cx) / half;
-          const edgeZ = Math.abs(cz) / half;
+          cx += Math.cos(angle) * ss;
+          cz += Math.sin(angle) * ss;
+        }
+
+        const fSmooth = Math.round(cfg.flowSmooth);
+        for (let s = 0; s < fSmooth; s++) {
+          for (let i = 1; i < steps - 1; i++) {
+            arr[i * 3 + 1] = arr[i * 3 + 1] * 0.5
+              + (arr[(i - 1) * 3 + 1] + arr[(i + 1) * 3 + 1]) * 0.25;
+          }
+        }
+
+        for (let i = 0; i < steps; i++) {
+          const envelope = Math.pow(Math.sin((i / (steps - 1)) * Math.PI), cfg.envelopeSteep);
+          const px = arr[i * 3];
+          const py = arr[i * 3 + 1];
+          const pz = arr[i * 3 + 2];
+
+          const edgeX = Math.abs(px) / half;
+          const edgeZ = Math.abs(pz) / half;
           const edge = Math.max(edgeX, edgeZ);
           const fade = edge < fadeStart ? 1 : Math.max(0, 1 - (edge - fadeStart) / fadeRange);
 
@@ -711,12 +730,12 @@
           colArr[i * 3 + 2] = fb;
 
           const ti = i * 2;
-          fillArr[ti * 3]         = cx;
-          fillArr[ti * 3 + 1]     = y;
-          fillArr[ti * 3 + 2]     = cz;
-          fillArr[(ti+1) * 3]     = cx;
+          fillArr[ti * 3]         = px;
+          fillArr[ti * 3 + 1]     = py;
+          fillArr[ti * 3 + 2]     = pz;
+          fillArr[(ti+1) * 3]     = px;
           fillArr[(ti+1) * 3 + 1] = 0;
-          fillArr[(ti+1) * 3 + 2] = cz;
+          fillArr[(ti+1) * 3 + 2] = pz;
 
           fillColArr[ti * 3]         = colR * eFade;
           fillColArr[ti * 3 + 1]     = colG * eFade;
@@ -724,9 +743,6 @@
           fillColArr[(ti+1) * 3]     = 0;
           fillColArr[(ti+1) * 3 + 1] = 0;
           fillColArr[(ti+1) * 3 + 2] = 0;
-
-          cx += Math.cos(angle) * ss;
-          cz += Math.sin(angle) * ss;
         }
 
         d.geo.getAttribute("position").needsUpdate = true;
@@ -870,6 +886,7 @@
     "s-flow-step-size-hi":    { key: "flowStepSizeHi" },
     "s-flow-step-size-react": { key: "flowStepSizeReact" },
     "s-flow-band-spread":     { key: "flowBandSpread", rebuild: true },
+    "s-flow-smooth":          { key: "flowSmooth" },
     "s-flow-stagger":         { key: "flowStagger" },
     "s-flow-hist-window":     { key: "flowHistWindow" },
     "s-flow-hist-fade":       { key: "flowHistFade" },
@@ -924,7 +941,7 @@
       flowPerBand: 20, flowSteps: 30, flowNoiseFreq: 0.03, flowNoiseSpeed: 0.10,
       flowOctaves: 2, flowEdgeFade: 0.20, flowStartDrift: 0.8,
       flowStepSizeLo: 0.02, flowStepSizeHi: 0.03, flowStepSizeReact: 0.50,
-      flowStagger: 0.10, flowHistWindow: 0.10, flowHistFade: 0.30, flowHistBlend: 0.10, flowBandSpread: 0,
+      flowStagger: 0.10, flowHistWindow: 0.10, flowHistFade: 0.30, flowHistBlend: 0.10, flowBandSpread: 0, flowSmooth: 3,
     },
   };
 
