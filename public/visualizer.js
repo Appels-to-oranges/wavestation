@@ -523,8 +523,8 @@
           if (wfStr > 0) {
             const nx = baseX * wfFreq;
             const nz = z * wfFreq;
-            x += simplex3(nx, nz, wfT + b * 5.7) * wfStr;
-            zv += simplex3(nx + 100, nz + 100, wfT + b * 5.7) * wfStr;
+            x += simplex3(nx, nz, wfT) * wfStr;
+            zv += simplex3(nx + 100, nz + 100, wfT) * wfStr;
           }
 
           lineArr[i * 3]     = x;
