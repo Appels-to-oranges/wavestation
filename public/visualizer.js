@@ -383,7 +383,9 @@
 
       this.perlinData.forEach(d => {
         this.scene.remove(d.line);
+        this.scene.remove(d.fillMesh);
         d.geo.dispose(); d.mat.dispose();
+        d.fillGeo.dispose(); d.fillMat.dispose();
       });
       this.perlinData = [];
     }
@@ -555,8 +557,9 @@
         const bandColor = new THREE.Color(cr, cg, cb);
 
         for (let l = 0; l < cfg.flowPerBand; l++) {
-          const positions = new Float32Array(cfg.flowSteps * 3);
-          const colors = new Float32Array(cfg.flowSteps * 3);
+          const steps = cfg.flowSteps;
+          const positions = new Float32Array(steps * 3);
+          const colors = new Float32Array(steps * 3);
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
           geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -566,11 +569,29 @@
           const line = new THREE.Line(geo, mat);
           this.scene.add(line);
 
+          const fillVerts = new Float32Array(steps * 2 * 3);
+          const fillColors = new Float32Array(steps * 2 * 3);
+          const fillGeo = new THREE.BufferGeometry();
+          fillGeo.setAttribute("position", new THREE.BufferAttribute(fillVerts, 3));
+          fillGeo.setAttribute("color", new THREE.BufferAttribute(fillColors, 3));
+          const fillIdx = [];
+          for (let i = 0; i < steps - 1; i++) {
+            fillIdx.push(i*2, i*2+1, (i+1)*2);
+            fillIdx.push(i*2+1, (i+1)*2+1, (i+1)*2);
+          }
+          fillGeo.setIndex(fillIdx);
+          const fillMat = new THREE.MeshBasicMaterial({
+            vertexColors: true, transparent: true, opacity: cfg.fillOpacity,
+            side: THREE.DoubleSide, depthWrite: false,
+          });
+          const fillMesh = new THREE.Mesh(fillGeo, fillMat);
+          this.scene.add(fillMesh);
+
           const seed = b * 31.7 + l * 3.1;
           const sx = simplex3(seed, 0, 0) * half * 1.4;
           const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
 
-          this.perlinData.push({ line, geo, mat, band: b, bandT, bandColor, sx, sz, seed, lineIdx: l });
+          this.perlinData.push({ line, geo, mat, fillMesh, fillGeo, fillMat, band: b, bandT, bandColor, sx, sz, seed, lineIdx: l });
         }
       }
     }
@@ -610,6 +631,8 @@
         const d = this.perlinData[p];
         const arr = d.geo.getAttribute("position").array;
         const colArr = d.geo.getAttribute("color").array;
+        const fillArr = d.fillGeo.getAttribute("position").array;
+        const fillColArr = d.fillGeo.getAttribute("color").array;
         const amp = this.bandDisplay[d.band] || 0;
         const smooth = smoothCache[d.band];
         if (!smooth) continue;
@@ -620,6 +643,7 @@
                  + amp * cfg.flowStepSizeReact;
 
         d.mat.opacity = cfg.lineOpacity;
+        d.fillMat.opacity = cfg.fillOpacity;
 
         const cBlend = 1 - (1 - (this.bandColorAmp[d.band] || 0)) * cfg.colorMix;
         const colR = 1 + (d.bandColor.r - 1) * cBlend;
@@ -653,9 +677,28 @@
           const edge = Math.max(Math.abs(cx) / bound, Math.abs(cz) / bound);
           const fade = edge < fadeStart ? 1 : Math.max(0, 1 - (edge - fadeStart) / fadeRange);
 
-          colArr[i * 3]     = colR * fade;
-          colArr[i * 3 + 1] = colG * fade;
-          colArr[i * 3 + 2] = colB * fade;
+          const fr = colR * fade;
+          const fg = colG * fade;
+          const fb = colB * fade;
+
+          colArr[i * 3]     = fr;
+          colArr[i * 3 + 1] = fg;
+          colArr[i * 3 + 2] = fb;
+
+          const ti = i * 2;
+          fillArr[ti * 3]         = cx;
+          fillArr[ti * 3 + 1]     = y;
+          fillArr[ti * 3 + 2]     = cz;
+          fillArr[(ti+1) * 3]     = cx;
+          fillArr[(ti+1) * 3 + 1] = 0;
+          fillArr[(ti+1) * 3 + 2] = cz;
+
+          fillColArr[ti * 3]         = fr;
+          fillColArr[ti * 3 + 1]     = fg;
+          fillColArr[ti * 3 + 2]     = fb;
+          fillColArr[(ti+1) * 3]     = fr;
+          fillColArr[(ti+1) * 3 + 1] = fg;
+          fillColArr[(ti+1) * 3 + 2] = fb;
 
           cx += Math.cos(angle) * ss;
           cz += Math.sin(angle) * ss;
@@ -666,6 +709,8 @@
 
         d.geo.getAttribute("position").needsUpdate = true;
         d.geo.getAttribute("color").needsUpdate = true;
+        d.fillGeo.getAttribute("position").needsUpdate = true;
+        d.fillGeo.getAttribute("color").needsUpdate = true;
       }
     }
 
