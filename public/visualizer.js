@@ -30,8 +30,12 @@
     lineOpacity: 1.0,
     fillOpacity: 0.10,
 
+    lineWidth: 1,
     colorMix: 0,
     colorDecay: 0.03,
+    colorBase: 0,
+    bgBrightness: 0.04,
+    envelopeSteep: 1.0,
 
     minDb: -80,
     maxDb: 0,
@@ -187,12 +191,14 @@
   /* ===== Visualizer ===== */
 
   const _white = new THREE.Color(1, 1, 1);
+  const _black = new THREE.Color(0, 0, 0);
 
   class Visualizer {
     constructor(canvas) {
       this.canvas = canvas;
       this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-      this.renderer.setClearColor(0x0a0a0a, 1);
+      const bg = Math.round(cfg.bgBrightness * 255);
+      this.renderer.setClearColor(new THREE.Color(bg/255, bg/255, bg/255), 1);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
       this.aspect = 1;
@@ -453,7 +459,7 @@
         }
         const lineGeo = new THREE.BufferGeometry();
         lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3));
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: cfg.lineOpacity });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: cfg.lineOpacity, linewidth: cfg.lineWidth });
         const line = new THREE.Line(lineGeo, lineMat);
         this.scene.add(line);
 
@@ -507,10 +513,12 @@
         const z = d.z;
         d.lineMat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
+        d.lineMat.linewidth = cfg.lineWidth;
 
+        const baseColor = cfg.colorBase > 0.5 ? _black : _white;
         const cBlend = 1 - (1 - (this.bandColorAmp[b] || 0)) * cfg.colorMix;
-        d.lineMat.color.copy(_white).lerp(d.bandColor, cBlend);
-        d.fillMat.color.copy(_white).lerp(d.bandColor, cBlend);
+        d.lineMat.color.copy(baseColor).lerp(d.bandColor, cBlend);
+        d.fillMat.color.copy(baseColor).lerp(d.bandColor, cBlend);
 
         for (let i = 0; i < histW; i++) {
           const x = -cfg.chartSize / 2 + (i / (histW - 1)) * cfg.chartSize;
@@ -565,7 +573,7 @@
           geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
           geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
           const mat = new THREE.LineBasicMaterial({
-            vertexColors: true, transparent: true, opacity: 0.05, depthWrite: false,
+            vertexColors: true, transparent: true, opacity: 0.05, depthWrite: false, linewidth: cfg.lineWidth,
           });
           const line = new THREE.Line(geo, mat);
           this.scene.add(line);
@@ -648,11 +656,15 @@
 
         d.mat.opacity = cfg.lineOpacity;
         d.fillMat.opacity = cfg.fillOpacity;
+        d.mat.linewidth = cfg.lineWidth;
 
+        const baseR = cfg.colorBase > 0.5 ? 0 : 1;
+        const baseG = baseR;
+        const baseB = baseR;
         const cBlend = 1 - (1 - (this.bandColorAmp[d.band] || 0)) * cfg.colorMix;
-        const colR = 1 + (d.bandColor.r - 1) * cBlend;
-        const colG = 1 + (d.bandColor.g - 1) * cBlend;
-        const colB = 1 + (d.bandColor.b - 1) * cBlend;
+        const colR = baseR + (d.bandColor.r - baseR) * cBlend;
+        const colG = baseG + (d.bandColor.g - baseG) * cBlend;
+        const colB = baseB + (d.bandColor.b - baseB) * cBlend;
 
         const drift = cfg.flowStartDrift;
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
@@ -662,7 +674,7 @@
         let cz = startZ;
 
         for (let i = 0; i < steps; i++) {
-          const envelope = Math.sin((i / (steps - 1)) * Math.PI);
+          const envelope = Math.pow(Math.sin((i / (steps - 1)) * Math.PI), cfg.envelopeSteep);
           const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
 
           const yNoise = (fbm3(cx * nf + 200, cz * nf + 200, t, 2) + 1) * 0.5;
@@ -753,6 +765,10 @@
       }
 
       this._updateCamera();
+
+      const bgV = cfg.bgBrightness;
+      this.renderer.setClearColor(new THREE.Color(bgV, bgV, bgV), 1);
+
       this.renderer.render(this.scene, this.camera);
     }
   }
@@ -822,8 +838,12 @@
     "s-floor-factor": { key: "floorFactor" },
     "s-line-opacity": { key: "lineOpacity" },
     "s-fill-opacity": { key: "fillOpacity" },
+    "s-line-width":   { key: "lineWidth" },
     "s-color-mix":    { key: "colorMix" },
     "s-color-decay":  { key: "colorDecay" },
+    "s-color-base":   { key: "colorBase" },
+    "s-bg-brightness":{ key: "bgBrightness" },
+    "s-envelope-steep":{ key: "envelopeSteep" },
     "s-min-db":       { key: "minDb" },
     "s-max-db":       { key: "maxDb" },
     "s-audio-delay":  { key: "audioDelay" },
@@ -874,7 +894,9 @@
       bands: 24, peakHeight: 2.0, chartSize: 16, histW: 250,
       smoothPasses: 12, fftSmooth: 0.95,
       decay: 0.10, avgRate: 0.003, peakDecay: 0.0005, floorFactor: 0.99,
-      lineOpacity: 1.0, fillOpacity: 0.10, colorMix: 0, colorDecay: 0.03,
+      lineWidth: 1, lineOpacity: 1.0, fillOpacity: 0.10,
+      colorMix: 0, colorDecay: 0.03, colorBase: 0,
+      bgBrightness: 0.04,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
     },
     perlinstation: {
@@ -882,7 +904,9 @@
       bands: 48, peakHeight: 3, chartSize: 16, histW: 200,
       smoothPasses: 20, fftSmooth: 0.75,
       decay: 0.60, avgRate: 0.05, peakDecay: 0.0005, floorFactor: 0.90,
-      lineOpacity: 0.20, fillOpacity: 0.15, colorMix: 0.70, colorDecay: 0.20,
+      lineWidth: 1, lineOpacity: 0.20, fillOpacity: 0.15,
+      colorMix: 0.70, colorDecay: 0.20, colorBase: 0,
+      bgBrightness: 0.04, envelopeSteep: 1.0,
       audioDelay: 0.10, minDb: -80, maxDb: 0,
       flowPerBand: 20, flowSteps: 30, flowNoiseFreq: 0.03, flowNoiseSpeed: 0.10,
       flowOctaves: 2, flowEdgeFade: 0.20, flowStartDrift: 0.8,
@@ -909,6 +933,9 @@
         }
       }
     });
+
+    const cbEl = document.getElementById("s-color-base");
+    if (cbEl && "colorBase" in defs) cbEl.checked = defs.colorBase > 0.5;
   }
 
   const themeBtn = document.getElementById("theme-btn");
@@ -919,6 +946,120 @@
       applyThemeDefaults(name);
       updateThemeSettings();
       viz.rebuildCurrentTheme();
+    });
+  }
+
+  /* ===== Preset system ===== */
+
+  const PRESET_STORAGE_KEY = "ws_presets";
+
+  function getPresets() {
+    try { return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY)) || {}; }
+    catch { return {}; }
+  }
+
+  function savePreset(name) {
+    const presets = getPresets();
+    const snap = {};
+    Object.keys(cfg).forEach(k => snap[k] = cfg[k]);
+    snap._theme = THEMES[currentTheme];
+    presets[name] = snap;
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+    renderPresetList();
+  }
+
+  function loadPreset(name) {
+    const presets = getPresets();
+    const snap = presets[name];
+    if (!snap) return;
+
+    if (snap._theme && snap._theme !== THEMES[currentTheme]) {
+      const idx = THEMES.indexOf(snap._theme);
+      if (idx >= 0) {
+        currentTheme = idx;
+        if (themeBtn) themeBtn.title = snap._theme === "wavestation" ? "Theme: WaveStation" : "Theme: PerlinStation";
+        updateThemeSettings();
+      }
+    }
+
+    Object.keys(snap).forEach(k => {
+      if (k === "_theme") return;
+      cfg[k] = snap[k];
+    });
+
+    Object.entries(sliders).forEach(([id, { key }]) => {
+      const slider = document.getElementById(id);
+      const valEl = document.getElementById("sv-" + id.slice(2));
+      if (!slider || !(key in snap)) return;
+      slider.value = snap[key];
+      if (valEl) {
+        if (key === "audioDelay") valEl.textContent = Math.round(snap[key] * 1000) + "ms";
+        else {
+          const v = snap[key];
+          valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
+        }
+      }
+    });
+
+    const colorBaseEl = document.getElementById("s-color-base");
+    if (colorBaseEl) colorBaseEl.checked = snap.colorBase > 0.5;
+
+    viz.rebuildCurrentTheme();
+  }
+
+  function deletePreset(name) {
+    const presets = getPresets();
+    delete presets[name];
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+    renderPresetList();
+  }
+
+  function renderPresetList() {
+    const list = document.getElementById("preset-list");
+    if (!list) return;
+    list.innerHTML = "";
+    const presets = getPresets();
+    Object.keys(presets).sort().forEach(name => {
+      const row = document.createElement("div");
+      row.className = "preset-row";
+
+      const label = document.createElement("span");
+      label.className = "preset-name";
+      label.textContent = name;
+      label.addEventListener("click", () => loadPreset(name));
+
+      const del = document.createElement("button");
+      del.className = "preset-del";
+      del.textContent = "\u00d7";
+      del.title = "Delete preset";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deletePreset(name); });
+
+      row.appendChild(label);
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  const presetSaveBtn = document.getElementById("preset-save");
+  const presetNameInput = document.getElementById("preset-name");
+  if (presetSaveBtn && presetNameInput) {
+    presetSaveBtn.addEventListener("click", () => {
+      const name = presetNameInput.value.trim();
+      if (!name) return;
+      savePreset(name);
+      presetNameInput.value = "";
+    });
+    presetNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { presetSaveBtn.click(); e.preventDefault(); }
+    });
+  }
+
+  renderPresetList();
+
+  const colorBaseCheck = document.getElementById("s-color-base");
+  if (colorBaseCheck) {
+    colorBaseCheck.addEventListener("change", () => {
+      cfg.colorBase = colorBaseCheck.checked ? 1 : 0;
     });
   }
 

@@ -120,25 +120,48 @@
 
           <div class="settings-group">
             <span class="settings-group-label">Appearance</span>
+            <label class="setting-row" title="Line thickness (may not apply on all GPUs/browsers)">
+              <span class="setting-label">Line Width</span>
+              <input type="range" class="setting-slider" id="s-line-width" min="1" max="5" step="0.5" value="1" />
+              <span class="setting-val" id="sv-line-width">1</span>
+            </label>
             <label class="setting-row" title="Opacity of the ridge/flow lines">
               <span class="setting-label">Line Opacity</span>
               <input type="range" class="setting-slider" id="s-line-opacity" min="0" max="1" step="0.05" value="1" />
               <span class="setting-val" id="sv-line-opacity">1</span>
             </label>
-            <label class="setting-row" title="Opacity of the filled area beneath ridges (WaveStation only)">
+            <label class="setting-row" title="Opacity of the filled area beneath lines">
               <span class="setting-label">Fill Opacity</span>
               <input type="range" class="setting-slider" id="s-fill-opacity" min="0" max="1" step="0.01" value="0.10" />
               <span class="setting-val" id="sv-fill-opacity">0.10</span>
             </label>
-            <label class="setting-row" title="0 = always full color, 1 = white at rest, color on amplitude">
+            <label class="setting-row" title="Background brightness — 0 = black, 1 = white">
+              <span class="setting-label">Background</span>
+              <input type="range" class="setting-slider" id="s-bg-brightness" min="0" max="1" step="0.01" value="0.04" />
+              <span class="setting-val" id="sv-bg-brightness">0.04</span>
+            </label>
+            <label class="setting-row" title="0 = always full color, 1 = base color at rest, band color on amplitude">
               <span class="setting-label">Color Mix</span>
               <input type="range" class="setting-slider" id="s-color-mix" min="0" max="1" step="0.05" value="0" />
               <span class="setting-val" id="sv-color-mix">0</span>
             </label>
-            <label class="setting-row" title="How fast color fades back to white after a peak — lower = lingers longer">
+            <label class="setting-row" title="How fast color fades back to base after a peak — lower = lingers longer">
               <span class="setting-label">Color Decay</span>
               <input type="range" class="setting-slider" id="s-color-decay" min="0.005" max="0.5" step="0.005" value="0.03" />
               <span class="setting-val" id="sv-color-decay">0.03</span>
+            </label>
+            <label class="setting-row setting-row-check" title="Checked = lines start black, unchecked = lines start white">
+              <span class="setting-label">Black Base</span>
+              <input type="checkbox" id="s-color-base" />
+            </label>
+          </div>
+
+          <div class="settings-group theme-perlin" style="display:none">
+            <span class="settings-group-label">Envelope</span>
+            <label class="setting-row" title="Controls the mound shape — 1 = smooth sine, higher = sharper peak, lower = flatter plateau">
+              <span class="setting-label">Steepness</span>
+              <input type="range" class="setting-slider" id="s-envelope-steep" min="0.2" max="3" step="0.1" value="1" />
+              <span class="setting-val" id="sv-envelope-steep">1</span>
             </label>
           </div>
 
@@ -259,6 +282,15 @@
               <input type="range" class="setting-slider" id="s-max-db" min="-30" max="0" step="1" value="0" />
               <span class="setting-val" id="sv-max-db">0</span>
             </label>
+          </div>
+
+          <div class="settings-group">
+            <span class="settings-group-label">Presets</span>
+            <div class="preset-save-row">
+              <input type="text" class="preset-input" id="preset-name" placeholder="Preset name…" />
+              <button class="preset-save-btn" id="preset-save">Save</button>
+            </div>
+            <div class="preset-list" id="preset-list"></div>
           </div>
 
         </div>
