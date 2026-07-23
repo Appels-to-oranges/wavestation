@@ -307,29 +307,15 @@
           this.delayNode.delayTime.value = cfg.audioDelay;
 
         this.analyser.getByteFrequencyData(this.rawData);
-        let sum = 0;
-        for (let i = 0; i < this.rawData.length; i++) sum += this.rawData[i];
-        if (sum > 200) {
-          for (let i = 0; i < this.binCount; i++) {
-            const r = this.rawData[i] / 255;
-            this.smoothed[i] += (r - this.smoothed[i]) * 1.0;
-          }
-          return;
+        for (let i = 0; i < this.binCount; i++) {
+          const r = this.rawData[i] / 255;
+          this.smoothed[i] += (r - this.smoothed[i]) * 1.0;
         }
+        return;
       }
-      const t = this.time;
-      const boost = this.isPlaying ? 1.4 : 0.5;
+
       for (let i = 0; i < this.binCount; i++) {
-        const f = i / this.binCount;
-        const fall = Math.pow(1 - f, 1.6);
-        const v =
-          (0.15 +
-            Math.sin(t * 0.4 + f * 5) * 0.1 +
-            Math.sin(t * 0.7 + f * 10 + 1.2) * 0.08 +
-            Math.cos(t * 1.0) * 0.06 * (1 - f)) *
-          fall * boost;
-        this.smoothed[i] +=
-          (Math.max(0, Math.min(1, v)) - this.smoothed[i]) * 0.04;
+        this.smoothed[i] *= 0.92;
       }
     }
 

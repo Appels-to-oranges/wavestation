@@ -113,11 +113,19 @@
   }
 
   /* ---------- Playback ---------- */
+  let retryCount = 0;
+  let retryTimer = null;
+  const MAX_RETRIES = 4;
+  const RETRY_DELAYS = [2000, 4000, 8000, 15000];
+  let stallTimer = null;
+  const STALL_TIMEOUT = 12000;
+
   function playStation(station) {
     if (!station?.url) return;
+    clearRetry();
     currentStation = station;
-    audio.src = "/api/stream?url=" + encodeURIComponent(station.url);
-    audio.play().catch((e) => console.warn("Playback failed:", e));
+    retryCount = 0;
+    startStream(station);
 
     npName.textContent = station.name || "Unknown Station";
     npMeta.textContent = [station.country, station.tags]
@@ -138,7 +146,75 @@
     highlightPlaying();
   }
 
+  function startStream(station) {
+    audio.src = "/api/stream?url=" + encodeURIComponent(station.url);
+    audio.play().catch((e) => {
+      console.warn("Playback failed:", e);
+      scheduleRetry();
+    });
+    resetStallTimer();
+  }
+
+  function scheduleRetry() {
+    if (!currentStation || retryCount >= MAX_RETRIES) {
+      if (retryCount >= MAX_RETRIES) {
+        npMeta.textContent = "Connection lost — tap to retry";
+      }
+      return;
+    }
+    const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
+    retryCount++;
+    npMeta.textContent = "Reconnecting...";
+    retryTimer = setTimeout(() => {
+      if (currentStation) startStream(currentStation);
+    }, delay);
+  }
+
+  function clearRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    clearTimeout(stallTimer);
+    stallTimer = null;
+  }
+
+  function resetStallTimer() {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      if (currentStation && !audio.paused && audio.readyState < 3) {
+        console.warn("Stream stalled, reconnecting...");
+        scheduleRetry();
+      }
+    }, STALL_TIMEOUT);
+  }
+
+  audio.addEventListener("error", () => {
+    if (currentStation) scheduleRetry();
+  });
+
+  audio.addEventListener("stalled", () => {
+    resetStallTimer();
+  });
+
+  audio.addEventListener("waiting", () => {
+    resetStallTimer();
+  });
+
+  audio.addEventListener("playing", () => {
+    retryCount = 0;
+    clearTimeout(stallTimer);
+    if (currentStation) {
+      npMeta.textContent = [currentStation.country, currentStation.tags]
+        .filter(Boolean)
+        .join(" · ");
+    }
+  });
+
+  audio.addEventListener("timeupdate", () => {
+    clearTimeout(stallTimer);
+  });
+
   function stopStation() {
+    clearRetry();
     audio.pause();
     audio.src = "";
     currentStation = null;
@@ -182,11 +258,11 @@
       .then((r) => r.json())
       .then((stations) => {
         clearTimeout(timeout);
-        const secure = (stations || []).filter((st) => {
+        const valid = (stations || []).filter((st) => {
           const u = st.url_resolved || st.url;
-          return u && u.startsWith("https");
+          return u && (u.startsWith("https") || u.startsWith("http"));
         });
-        renderResults(secure);
+        renderResults(valid);
       })
       .catch((err) => {
         clearTimeout(timeout);
