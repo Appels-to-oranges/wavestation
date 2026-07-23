@@ -56,6 +56,7 @@
     flowHistWindow: 1.0,
     flowHistFade: 0.08,
     flowHistBlend: 0.2,
+    flowBandSpread: 0,
   };
 
   const THEMES = ["wavestation", "perlinstation"];
@@ -589,7 +590,10 @@
 
           const seed = b * 31.7 + l * 3.1;
           const sx = simplex3(seed, 0, 0) * half * 1.4;
-          const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
+          const orderedZ = -half + bandT * cfg.chartSize;
+          const spreadOffset = simplex3(b * 7.3, 0.5, 0) * half * 1.8 * cfg.flowBandSpread;
+          const baseZ = orderedZ * (1 - cfg.flowBandSpread) + (-half + (simplex3(b * 7.3, 0.5, 0) + 1) * 0.5 * cfg.chartSize) * cfg.flowBandSpread;
+          const sz = baseZ + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
 
           this.perlinData.push({ line, geo, mat, fillMesh, fillGeo, fillMat, band: b, bandT, bandColor, sx, sz, seed, lineIdx: l });
         }
@@ -833,6 +837,7 @@
     "s-flow-step-size-lo":    { key: "flowStepSizeLo" },
     "s-flow-step-size-hi":    { key: "flowStepSizeHi" },
     "s-flow-step-size-react": { key: "flowStepSizeReact" },
+    "s-flow-band-spread":     { key: "flowBandSpread", rebuild: true },
     "s-flow-stagger":         { key: "flowStagger" },
     "s-flow-hist-window":     { key: "flowHistWindow" },
     "s-flow-hist-fade":       { key: "flowHistFade" },
@@ -882,7 +887,7 @@
       flowPerBand: 50, flowSteps: 30, flowNoiseFreq: 0.03, flowNoiseSpeed: 0.10,
       flowOctaves: 3, flowEdgeFade: 0.20, flowStartDrift: 0.8,
       flowStepSizeLo: 0.02, flowStepSizeHi: 0.03, flowStepSizeReact: 0.50,
-      flowStagger: 0.80, flowHistWindow: 0.10, flowHistFade: 0.30, flowHistBlend: 0.10,
+      flowStagger: 0.80, flowHistWindow: 0.10, flowHistFade: 0.30, flowHistBlend: 0.10, flowBandSpread: 0,
     },
   };
 
