@@ -565,7 +565,7 @@
           const sx = simplex3(seed, 0, 0) * half * 1.4;
           const sz = -half + bandT * cfg.chartSize + simplex3(0, seed, 0) * (cfg.chartSize / bands) * 0.6;
 
-          this.perlinData.push({ line, geo, mat, band: b, bandT, bandColor, sx, sz, seed });
+          this.perlinData.push({ line, geo, mat, band: b, bandT, bandColor, sx, sz, seed, lineIdx: l });
         }
       }
     }
@@ -577,20 +577,42 @@
       const t = this.time * cfg.flowNoiseSpeed;
       const oct = Math.round(cfg.flowOctaves);
       const steps = cfg.flowSteps;
+      const histW = cfg.histW;
       const fadeStart = cfg.flowEdgeFade;
       const fadeRange = Math.max(0.01, 1 - fadeStart);
+      const fadeLen = Math.min(40, Math.floor(histW * 0.08));
+      const perBand = cfg.flowPerBand;
+      const maxStagger = Math.floor(histW * 0.4);
+
+      const smoothCache = this._perlinSmoothCache || [];
+      const raw = new Float32Array(histW);
+
+      for (let b = 0; b < this.activeBands; b++) {
+        for (let i = 0; i < histW; i++) {
+          let v = this.history[b][(this.writeCol + i) % histW];
+          if (i < fadeLen) v *= i / fadeLen;
+          else if (i > histW - fadeLen) v *= (histW - i) / fadeLen;
+          raw[i] = v;
+        }
+        this._smoothPass(raw, cfg.smoothPasses);
+        smoothCache[b] = catmullRom(raw, histW);
+      }
+      this._perlinSmoothCache = smoothCache;
 
       for (let p = 0; p < this.perlinData.length; p++) {
         const d = this.perlinData[p];
         const arr = d.geo.getAttribute("position").array;
         const colArr = d.geo.getAttribute("color").array;
         const amp = this.bandDisplay[d.band] || 0;
+        const smooth = smoothCache[d.band];
+        if (!smooth) continue;
+
+        const stagger = Math.floor((d.lineIdx / perBand) * maxStagger);
 
         const ss = cfg.flowStepSizeLo + (cfg.flowStepSizeHi - cfg.flowStepSizeLo) * d.bandT
                  + amp * cfg.flowStepSizeReact;
 
-        const opacity = (0.3 + amp * 0.4) * cfg.lineOpacity;
-        d.mat.opacity = opacity;
+        d.mat.opacity = cfg.lineOpacity;
 
         const cBlend = 1 - (1 - (this.bandColorAmp[d.band] || 0)) * cfg.colorMix;
         const colR = 1 + (d.bandColor.r - 1) * cBlend;
@@ -600,15 +622,16 @@
         const drift = cfg.flowStartDrift;
         const startX = d.sx + simplex3(d.seed, t * 0.15, 0) * drift;
         const startZ = d.sz + simplex3(0, d.seed, t * 0.15) * drift * 0.5;
-        const yBase = amp * cfg.peakHeight;
 
         let cx = startX;
         let cz = startZ;
 
         for (let i = 0; i < steps; i++) {
+          const histIdx = Math.min(histW - 1, histW - 1 - stagger + Math.floor(i * histW / steps));
+          const hVal = histIdx >= 0 ? Math.max(0, smooth[histIdx]) : 0;
+
           const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
-          const yNoise = fbm3(cx * nf + 200, cz * nf + 200, t, 2);
-          const y = yBase * (0.5 + 0.5 * (yNoise + 1));
+          const y = hVal * cfg.peakHeight;
 
           arr[i * 3]     = cx;
           arr[i * 3 + 1] = y;
