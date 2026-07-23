@@ -51,6 +51,10 @@
 
     flowEdgeFade: 0.6,
     flowStartDrift: 0.8,
+
+    flowStagger: 0.4,
+    flowHistWindow: 1.0,
+    flowHistFade: 0.08,
   };
 
   const THEMES = ["wavestation", "perlinstation"];
@@ -580,9 +584,10 @@
       const histW = cfg.histW;
       const fadeStart = cfg.flowEdgeFade;
       const fadeRange = Math.max(0.01, 1 - fadeStart);
-      const fadeLen = Math.min(40, Math.floor(histW * 0.08));
+      const fadeLen = Math.min(40, Math.floor(histW * cfg.flowHistFade));
       const perBand = cfg.flowPerBand;
-      const maxStagger = Math.floor(histW * 0.4);
+      const maxStagger = Math.floor(histW * cfg.flowStagger);
+      const histSpan = Math.max(1, Math.floor(histW * cfg.flowHistWindow));
 
       const smoothCache = this._perlinSmoothCache || [];
       const raw = new Float32Array(histW);
@@ -627,7 +632,7 @@
         let cz = startZ;
 
         for (let i = 0; i < steps; i++) {
-          const histIdx = Math.min(histW - 1, histW - 1 - stagger + Math.floor(i * histW / steps));
+          const histIdx = Math.min(histW - 1, histW - 1 - stagger + Math.floor(i * histSpan / steps));
           const hVal = histIdx >= 0 ? Math.max(0, smooth[histIdx]) : 0;
 
           const angle = fbm3(cx * nf, cz * nf, t, oct) * Math.PI * 2;
@@ -709,7 +714,6 @@
 
   function updateThemeSettings() {
     const isWave = THEMES[currentTheme] === "wavestation";
-    document.querySelectorAll(".theme-wave").forEach(el => el.style.display = isWave ? "block" : "none");
     document.querySelectorAll(".theme-perlin").forEach(el => el.style.display = isWave ? "none" : "block");
   }
 
@@ -785,6 +789,9 @@
     "s-flow-step-size-lo":    { key: "flowStepSizeLo" },
     "s-flow-step-size-hi":    { key: "flowStepSizeHi" },
     "s-flow-step-size-react": { key: "flowStepSizeReact" },
+    "s-flow-stagger":         { key: "flowStagger" },
+    "s-flow-hist-window":     { key: "flowHistWindow" },
+    "s-flow-hist-fade":       { key: "flowHistFade" },
   };
 
   let rebuildTimer = null;
