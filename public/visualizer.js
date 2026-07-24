@@ -1008,6 +1008,10 @@
   const captureBtn = document.getElementById("capture-btn");
   let capturing = false;
 
+  if (captureBtn && !(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
+    captureBtn.style.display = "none";
+  }
+
   if (captureBtn) {
     captureBtn.addEventListener("click", async () => {
       if (capturing) {
