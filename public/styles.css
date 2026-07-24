@@ -291,6 +291,18 @@ body {
   color: rgba(255,255,255,0.85);
 }
 
+/* Camera sub-settings */
+.cam-auto-settings,
+.cam-lock-settings {
+  padding-left: 0.5rem;
+  border-left: 2px solid rgba(255,255,255,0.06);
+  margin: 0.2rem 0 0.3rem 0.25rem;
+}
+.inverted .cam-auto-settings,
+.inverted .cam-lock-settings {
+  border-left-color: rgba(0,0,0,0.1);
+}
+
 /* ===== Inverted (Negative) overrides ===== */
 .inverted .viz-brand .brand-name { color: rgba(0,0,0,0.6); }
 .inverted .viz-brand .brand-sep  { color: rgba(0,0,0,0.2); }

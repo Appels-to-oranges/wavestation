@@ -20,6 +20,12 @@
     peakHeight: 2.0,
     fov: 50,
 
+    cameraAuto: 0,
+    cameraHoldTime: 15,
+    cameraLerpRate: 0.008,
+    cameraLock: 0,
+    cameraAngle: 0,
+
     smoothPasses: 12,
     fftSmooth: 0.95,
     decay: 0.10,
@@ -234,6 +240,15 @@
 
       this.time = 0;
       this.lastTime = performance.now() / 1000;
+
+      this.camCurrent = {
+        height: cfg.orbitHeight,
+        fov: cfg.fov,
+        radius: cfg.orbitRadius,
+        speedMult: 1.0,
+      };
+      this.camTarget = { ...this.camCurrent };
+      this.camHoldTimer = cfg.cameraHoldTime;
 
       this.ridgeData = [];
       this.perlinData = [];
@@ -754,15 +769,60 @@
 
     /* ---- camera orbit ---- */
 
-    _updateCamera() {
-      const angle = this.time * cfg.orbitSpeed;
+    _pickCamTarget() {
+      const rr = (lo, hi) => lo + Math.random() * (hi - lo);
+      this.camTarget = {
+        height: rr(cfg.orbitHeight * 0.5, cfg.orbitHeight * 2.0),
+        fov:    rr(cfg.fov * 0.85, cfg.fov * 1.3),
+        radius: rr(cfg.orbitRadius * 0.85, cfg.orbitRadius * 1.15),
+        speedMult: rr(0.6, 1.4),
+      };
+    }
+
+    _updateCamera(dt) {
+      let angle, height, radius, fov;
+
+      if (cfg.cameraLock > 0.5) {
+        angle = cfg.cameraAngle * Math.PI / 180;
+        height = cfg.orbitHeight;
+        radius = cfg.orbitRadius;
+        fov = cfg.fov;
+      } else if (cfg.cameraAuto > 0.5) {
+        this.camHoldTimer -= dt;
+        if (this.camHoldTimer <= 0) {
+          this._pickCamTarget();
+          this.camHoldTimer = cfg.cameraHoldTime;
+        }
+
+        const lr = 1 - Math.pow(1 - cfg.cameraLerpRate, dt * 60);
+        this.camCurrent.height += (this.camTarget.height - this.camCurrent.height) * lr;
+        this.camCurrent.fov += (this.camTarget.fov - this.camCurrent.fov) * lr;
+        this.camCurrent.radius += (this.camTarget.radius - this.camCurrent.radius) * lr;
+        this.camCurrent.speedMult += (this.camTarget.speedMult - this.camCurrent.speedMult) * lr;
+
+        angle = this.time * cfg.orbitSpeed * this.camCurrent.speedMult;
+        height = this.camCurrent.height;
+        radius = this.camCurrent.radius;
+        fov = this.camCurrent.fov;
+      } else {
+        angle = this.time * cfg.orbitSpeed;
+        height = cfg.orbitHeight;
+        radius = cfg.orbitRadius;
+        fov = cfg.fov;
+
+        this.camCurrent.height = height;
+        this.camCurrent.fov = fov;
+        this.camCurrent.radius = radius;
+        this.camCurrent.speedMult = 1.0;
+      }
+
       this.camera.position.set(
-        Math.sin(angle) * cfg.orbitRadius,
-        cfg.orbitHeight,
-        Math.cos(angle) * cfg.orbitRadius
+        Math.sin(angle) * radius,
+        height,
+        Math.cos(angle) * radius
       );
-      if (this.camera.fov !== cfg.fov) {
-        this.camera.fov = cfg.fov;
+      if (this.camera.fov !== fov) {
+        this.camera.fov = fov;
         this.camera.updateProjectionMatrix();
       }
       this.camera.lookAt(0, 0.3, 0);
@@ -786,7 +846,7 @@
         this._updatePerlin();
       }
 
-      this._updateCamera();
+      this._updateCamera(dt);
 
       const bgV = cfg.bgBrightness;
       this.renderer.setClearColor(new THREE.Color(bgV, bgV, bgV), 1);
@@ -853,6 +913,9 @@
     "s-orbit-height": { key: "orbitHeight" },
     "s-orbit-speed":  { key: "orbitSpeed" },
     "s-fov":          { key: "fov" },
+    "s-camera-hold-time":  { key: "cameraHoldTime" },
+    "s-camera-lerp-rate":  { key: "cameraLerpRate" },
+    "s-camera-angle":      { key: "cameraAngle" },
     "s-bands":        { key: "bands", rebuild: true },
     "s-peak-height":  { key: "peakHeight" },
     "s-chart-size":   { key: "chartSize", rebuild: true },
@@ -907,6 +970,8 @@
       cfg[key] = v;
       if (valEl) {
         if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+        else if (key === "cameraAngle") valEl.textContent = Math.round(v) + "\u00b0";
+        else if (key === "cameraHoldTime") valEl.textContent = Math.round(v) + "s";
         else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
       }
 
@@ -922,6 +987,7 @@
   const themeDefaults = {
     wavestation: {
       orbitRadius: 20, orbitHeight: 5, orbitSpeed: 0.15, fov: 50,
+      cameraAuto: 0, cameraHoldTime: 15, cameraLerpRate: 0.008, cameraLock: 0, cameraAngle: 0,
       bands: 24, peakHeight: 2.0, chartSize: 16, histW: 250,
       smoothPasses: 12, fftSmooth: 0.95,
       decay: 0.10, avgRate: 0.003, peakDecay: 0.0005, floorFactor: 0.99,
@@ -933,6 +999,7 @@
     },
     perlinstation: {
       orbitRadius: 25, orbitHeight: 16, orbitSpeed: 0.10, fov: 50,
+      cameraAuto: 0, cameraHoldTime: 15, cameraLerpRate: 0.008, cameraLock: 0, cameraAngle: 0,
       bands: 48, peakHeight: 3, chartSize: 16, histW: 200,
       smoothPasses: 20, fftSmooth: 0.75,
       decay: 0.60, avgRate: 0.05, peakDecay: 0.0005, floorFactor: 0.90,
@@ -958,11 +1025,11 @@
       if (!slider || !(key in defs)) return;
       slider.value = defs[key];
       if (valEl) {
-        if (key === "audioDelay") valEl.textContent = Math.round(defs[key] * 1000) + "ms";
-        else {
-          const v = defs[key];
-          valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
-        }
+        const v = defs[key];
+        if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+        else if (key === "cameraAngle") valEl.textContent = Math.round(v) + "\u00b0";
+        else if (key === "cameraHoldTime") valEl.textContent = Math.round(v) + "s";
+        else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
       }
     });
 
@@ -970,6 +1037,11 @@
     if (cbEl && "colorBase" in defs) cbEl.checked = defs.colorBase > 0.5;
     const invEl = document.getElementById("s-invert");
     if (invEl && "invert" in defs) invEl.checked = defs.invert > 0.5;
+    const caEl = document.getElementById("s-camera-auto");
+    if (caEl && "cameraAuto" in defs) caEl.checked = defs.cameraAuto > 0.5;
+    const clEl = document.getElementById("s-camera-lock");
+    if (clEl && "cameraLock" in defs) clEl.checked = defs.cameraLock > 0.5;
+    updateCamUI();
   }
 
   const themeBtn = document.getElementById("theme-btn");
@@ -1027,11 +1099,11 @@
       if (!slider || !(key in snap)) return;
       slider.value = snap[key];
       if (valEl) {
-        if (key === "audioDelay") valEl.textContent = Math.round(snap[key] * 1000) + "ms";
-        else {
-          const v = snap[key];
-          valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
-        }
+        const v = snap[key];
+        if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+        else if (key === "cameraAngle") valEl.textContent = Math.round(v) + "\u00b0";
+        else if (key === "cameraHoldTime") valEl.textContent = Math.round(v) + "s";
+        else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
       }
     });
 
@@ -1039,6 +1111,11 @@
     if (colorBaseEl) colorBaseEl.checked = snap.colorBase > 0.5;
     const invertEl = document.getElementById("s-invert");
     if (invertEl) invertEl.checked = (snap.invert || 0) > 0.5;
+    const caEl = document.getElementById("s-camera-auto");
+    if (caEl) caEl.checked = (snap.cameraAuto || 0) > 0.5;
+    const clEl = document.getElementById("s-camera-lock");
+    if (clEl) clEl.checked = (snap.cameraLock || 0) > 0.5;
+    updateCamUI();
 
     viz.rebuildCurrentTheme();
   }
@@ -1106,6 +1183,38 @@
     });
   }
 
+  const camAutoCheck = document.getElementById("s-camera-auto");
+  const camAutoSettings = document.getElementById("cam-auto-settings");
+  const camLockCheck = document.getElementById("s-camera-lock");
+  const camLockSettings = document.getElementById("cam-lock-settings");
+
+  function updateCamUI() {
+    if (camAutoSettings) camAutoSettings.style.display = cfg.cameraAuto > 0.5 ? "block" : "none";
+    if (camLockSettings) camLockSettings.style.display = cfg.cameraLock > 0.5 ? "block" : "none";
+  }
+
+  if (camAutoCheck) {
+    camAutoCheck.addEventListener("change", () => {
+      cfg.cameraAuto = camAutoCheck.checked ? 1 : 0;
+      if (camAutoCheck.checked && camLockCheck) {
+        cfg.cameraLock = 0;
+        camLockCheck.checked = false;
+      }
+      updateCamUI();
+    });
+  }
+
+  if (camLockCheck) {
+    camLockCheck.addEventListener("change", () => {
+      cfg.cameraLock = camLockCheck.checked ? 1 : 0;
+      if (camLockCheck.checked && camAutoCheck) {
+        cfg.cameraAuto = 0;
+        camAutoCheck.checked = false;
+      }
+      updateCamUI();
+    });
+  }
+
   /* ===== Randomize ===== */
 
   const randomizeBtn = document.getElementById("randomize-btn");
@@ -1128,6 +1237,8 @@
         const valEl = document.getElementById("sv-" + id.slice(2));
         if (valEl) {
           if (key === "audioDelay") valEl.textContent = Math.round(v * 1000) + "ms";
+          else if (key === "cameraAngle") valEl.textContent = Math.round(v) + "\u00b0";
+          else if (key === "cameraHoldTime") valEl.textContent = Math.round(v) + "s";
           else valEl.textContent = v % 1 === 0 ? v : v.toFixed(v < 0.01 ? 4 : v < 1 ? 2 : 1);
         }
       });
@@ -1137,6 +1248,12 @@
 
       cfg.invert = Math.random() > 0.7 ? 1 : 0;
       if (invertCheck) invertCheck.checked = cfg.invert > 0.5;
+
+      cfg.cameraAuto = Math.random() > 0.5 ? 1 : 0;
+      if (camAutoCheck) camAutoCheck.checked = cfg.cameraAuto > 0.5;
+      cfg.cameraLock = 0;
+      if (camLockCheck) camLockCheck.checked = false;
+      updateCamUI();
 
       viz.rebuildCurrentTheme();
     });
