@@ -905,8 +905,27 @@
         vizSection.classList.remove("fullscreen");
       }
     });
+    let fsIdleTimer = null;
+    const FS_IDLE_MS = 10000;
+
+    function resetFsIdle() {
+      vizSection.classList.remove("fs-idle");
+      clearTimeout(fsIdleTimer);
+      if (document.fullscreenElement) {
+        fsIdleTimer = setTimeout(() => vizSection.classList.add("fs-idle"), FS_IDLE_MS);
+      }
+    }
+
+    vizSection.addEventListener("mousemove", resetFsIdle);
+    vizSection.addEventListener("mousedown", resetFsIdle);
+
     document.addEventListener("fullscreenchange", () => {
-      if (!document.fullscreenElement) vizSection.classList.remove("fullscreen");
+      if (!document.fullscreenElement) {
+        vizSection.classList.remove("fullscreen", "fs-idle");
+        clearTimeout(fsIdleTimer);
+      } else {
+        resetFsIdle();
+      }
       setTimeout(() => viz._resize(), 100);
     });
   }

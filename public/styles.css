@@ -117,6 +117,21 @@ body {
   border-radius: 0;
 }
 
+.visualizer-section .viz-brand,
+.visualizer-section .viz-controls,
+.visualizer-section .viz-settings {
+  transition: opacity 0.6s ease;
+}
+.visualizer-section.fs-idle {
+  cursor: none;
+}
+.visualizer-section.fs-idle .viz-brand,
+.visualizer-section.fs-idle .viz-controls,
+.visualizer-section.fs-idle .viz-settings {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ===== Settings Panel ===== */
 .viz-settings {
   position: absolute;
